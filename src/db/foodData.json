@@ -1,0 +1,15 @@
+{
+  "foods": [
+    { "id": "t1", "name": "Idli", "baseUnit": "1 piece (medium)", "baseWeight": 50, "calories": 58, "protein": 1.6, "carbs": 12.2, "fats": 0.1 },
+    { "id": "t2", "name": "Plain Dosa", "baseUnit": "1 piece (medium)", "baseWeight": 100, "calories": 133, "protein": 3.2, "carbs": 23, "fats": 2.5 },
+    { "id": "t3", "name": "Masala Dosa", "baseUnit": "1 piece (large)", "baseWeight": 150, "calories": 250, "protein": 5, "carbs": 35, "fats": 9 },
+    { "id": "t4", "name": "Medhu Vadai", "baseUnit": "1 piece", "baseWeight": 30, "calories": 97, "protein": 2.1, "carbs": 8.5, "fats": 6.2 },
+    { "id": "t5", "name": "Sambar", "baseUnit": "100 ml", "baseWeight": 100, "calories": 80, "protein": 3.5, "carbs": 12, "fats": 1.5 },
+    { "id": "t6", "name": "White Rice (Cooked)", "baseUnit": "1 cup", "baseWeight": 150, "calories": 205, "protein": 4.2, "carbs": 44.5, "fats": 0.4 },
+    { "id": "t7", "name": "Curd Rice", "baseUnit": "1 cup", "baseWeight": 200, "calories": 240, "protein": 6, "carbs": 35, "fats": 7 },
+    { "id": "t8", "name": "Chicken Chettinad", "baseUnit": "1 katori", "baseWeight": 150, "calories": 280, "protein": 18, "carbs": 8, "fats": 19 },
+    { "id": "t9", "name": "Egg Curry", "baseUnit": "1 katori", "baseWeight": 150, "calories": 190, "protein": 12, "carbs": 7, "fats": 13 },
+    { "id": "t10", "name": "Cabbage Poriyal", "baseUnit": "1 katori", "baseWeight": 100, "calories": 75, "protein": 2, "carbs": 8, "fats": 4 },
+    { "id": "t11", "name": "Filter Coffee", "baseUnit": "1 tumbler", "baseWeight": 120, "calories": 85, "protein": 3, "carbs": 10, "fats": 3.5 }
+  ]
+}
