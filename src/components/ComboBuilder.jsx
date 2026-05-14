@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Trash2, Edit2, Plus, ChevronLeft } from 'lucide-react';
-import foodData from '../db/foodData.json';
-import { saveCombo, getCombos, deleteCombo, updateCombo } from '../db/database';
+import { Save, Trash2, Edit2, Plus, ChevronLeft, Loader2 } from 'lucide-react';
+import { saveCombo, getCombos, deleteCombo, updateCombo, getCustomFoods } from '../db/database';
+
+// Pulling keys securely from the .env file
+const EDAMAM_APP_ID = import.meta.env.VITE_EDAMAM_APP_ID;
+const EDAMAM_APP_KEY = import.meta.env.VITE_EDAMAM_APP_KEY;
 
 export default function ComboBuilder() {
   // View State
@@ -15,15 +18,71 @@ export default function ComboBuilder() {
   const [selectedItems, setSelectedItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch combos on load
+  // Local DB & API State
+  const [userFoods, setUserFoods] = useState([]);
+  const [apiFoods, setApiFoods] = useState([]);
+  const [isSearchingAPI, setIsSearchingAPI] = useState(false);
+
+  // Fetch initial local data
   useEffect(() => {
     fetchCombos();
   }, []);
 
   const fetchCombos = async () => {
     const combos = await getCombos();
+    const customFoodsData = await getCustomFoods();
     setSavedCombos(combos);
+    setUserFoods(customFoodsData);
   };
+
+  // Edamam API Search Logic with Debounce
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setApiFoods([]);
+      setIsSearchingAPI(false);
+      return;
+    }
+
+    setIsSearchingAPI(true);
+
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        const response = await fetch(`https://api.edamam.com/api/food-database/v2/parser?app_id=${EDAMAM_APP_ID}&app_key=${EDAMAM_APP_KEY}&ingr=${encodeURIComponent(searchQuery)}`);
+        const data = await response.json();
+
+        // Map Edamam data to our app's standard format
+        const mappedData = (data.hints || []).map(item => {
+          const food = item.food;
+          return {
+            id: food.foodId,
+            name: food.label,
+            calories: food.nutrients.ENERC_KCAL || 0,
+            protein: food.nutrients.PROCNT || 0,
+            carbs: food.nutrients.CHOCDF || 0,
+            fats: food.nutrients.FAT || 0,
+            baseUnit: '100g',
+            baseWeight: 100, // Edamam defaults to 100g portions
+            isApi: true
+          };
+        });
+
+        // Deduplicate results
+        const uniqueApiFoods = Array.from(new Map(mappedData.map(item => [item.name.toLowerCase(), item])).values()).slice(0, 15);
+
+        setApiFoods(uniqueApiFoods);
+      } catch (error) {
+        console.error("Failed to fetch Edamam foods:", error);
+      } finally {
+        setIsSearchingAPI(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
+
+  // Combine local custom foods and global API foods
+  const localFiltered = userFoods.filter(food => food.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const combinedResults = [...localFiltered, ...apiFoods];
 
   // --- List View Actions ---
   const handleCreateNew = () => {
@@ -31,6 +90,7 @@ export default function ComboBuilder() {
     setComboName('');
     setSelectedItems([]);
     setSearchQuery('');
+    setApiFoods([]);
     setViewMode('builder');
   };
 
@@ -39,6 +99,7 @@ export default function ComboBuilder() {
     setComboName(combo.name);
     setSelectedItems(combo.items);
     setSearchQuery('');
+    setApiFoods([]);
     setViewMode('builder');
   };
 
@@ -49,8 +110,13 @@ export default function ComboBuilder() {
 
   // --- Builder View Actions ---
   const handleAddFood = (food) => {
-    setSelectedItems([...selectedItems, { ...food, uniqueId: Date.now(), amount: 1, metric: 'unit' }]);
+    // If it's an API food, default the input to 100 grams. If local, default to 1 unit.
+    const defaultMetric = food.isApi ? 'grams' : 'unit';
+    const defaultAmount = food.isApi ? 100 : 1;
+
+    setSelectedItems([...selectedItems, { ...food, uniqueId: Date.now(), amount: defaultAmount, metric: defaultMetric }]);
     setSearchQuery('');
+    setApiFoods([]);
   };
 
   const handleUpdateItem = (uniqueId, field, value) => {
@@ -74,7 +140,6 @@ export default function ComboBuilder() {
       setSuccessMsg('Combo saved successfully!');
     }
     
-    // Reset and return to list
     setComboName('');
     setSelectedItems([]);
     setEditingComboId(null);
@@ -89,12 +154,9 @@ export default function ComboBuilder() {
     return sum + (item.calories * ratio);
   }, 0);
 
-  const filteredFoods = foodData.foods.filter(food =>
-    food.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-24 animate-in fade-in">
+      
       {/* Header */}
       <header className="bg-white px-6 pt-10 pb-6 rounded-b-3xl shadow-sm flex items-center gap-3">
         {viewMode === 'builder' && (
@@ -122,8 +184,6 @@ export default function ComboBuilder() {
         {/* ================= LIST VIEW ================= */}
         {viewMode === 'list' && (
           <div className="space-y-4 animate-in fade-in slide-in-from-left-4">
-            
-            {/* Create New Button */}
             <button 
               onClick={handleCreateNew}
               className="w-full bg-white border-2 border-dashed border-slate-200 text-slate-500 font-bold py-5 rounded-2xl active:bg-slate-50 transition-all flex justify-center items-center gap-2"
@@ -131,7 +191,6 @@ export default function ComboBuilder() {
               <Plus className="w-5 h-5" /> Build New Combo
             </button>
 
-            {/* Existing Combos List */}
             {savedCombos.length > 0 ? (
               <div className="space-y-3">
                 {savedCombos.map(combo => (
@@ -150,7 +209,6 @@ export default function ComboBuilder() {
                         </button>
                       </div>
                     </div>
-                    {/* Preview of items inside */}
                     <div className="text-sm text-slate-500 bg-slate-50 p-3 rounded-xl">
                       {combo.items.map(i => `${i.amount} ${i.metric === 'grams' ? 'g' : 'x'} ${i.name}`).join(' • ')}
                     </div>
@@ -168,7 +226,9 @@ export default function ComboBuilder() {
         {/* ================= BUILDER VIEW ================= */}
         {viewMode === 'builder' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            <div className="bg-white p-5 rounded-3xl shadow-sm">
+            
+            {/* Combo Summary Card */}
+            <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
               <input 
                 type="text" 
                 placeholder="Combo Name (e.g., Daily Breakfast)" 
@@ -209,7 +269,7 @@ export default function ComboBuilder() {
                             onChange={(e) => handleUpdateItem(item.uniqueId, 'metric', e.target.value)}
                             className="w-full bg-white border border-slate-200 text-sm py-2.5 px-3 rounded-xl outline-none focus:border-green-500 appearance-none font-medium text-slate-700"
                           >
-                            <option value="unit">Units</option>
+                            {!item.isApi && <option value="unit">Units</option>}
                             <option value="grams">Grams</option>
                           </select>
                         </div>
@@ -238,34 +298,47 @@ export default function ComboBuilder() {
               </button>
             </div>
 
-            <div className="bg-white p-5 rounded-3xl shadow-sm">
-              <h3 className="font-bold text-lg mb-4">Add Foods to Combo</h3>
-              <input
-                type="text"
-                placeholder="Search Tamil foods..."
-                className="w-full bg-slate-100 py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all mb-4"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            {/* API Search Card */}
+            <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+              <h3 className="font-bold text-lg mb-4 text-slate-800">Add Foods to Combo</h3>
+              
+              <div className="relative mb-4">
+                <input
+                  type="text"
+                  placeholder="Search local or global foods..."
+                  className="w-full bg-slate-50 border border-slate-200 py-3 px-4 pr-10 rounded-xl outline-none focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all font-medium text-slate-700"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {isSearchingAPI && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500 animate-spin" />
+                )}
+              </div>
               
               <div className="max-h-60 overflow-y-auto space-y-2">
-                {searchQuery && filteredFoods.map((food) => (
+                {searchQuery && combinedResults.map((food, idx) => (
                   <div 
-                    key={food.id} 
+                    key={food.id || idx} 
                     onClick={() => handleAddFood(food)}
-                    className="flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 rounded-xl cursor-pointer transition-colors border border-slate-100"
+                    className="flex justify-between items-center p-4 bg-white hover:bg-slate-50 active:bg-slate-100 rounded-xl cursor-pointer transition-colors border border-slate-100 shadow-sm"
                   >
-                    <span className="font-semibold text-slate-700">{food.name}</span>
-                    <span className="text-sm font-bold text-slate-400">{food.calories} kcal</span>
+                    <div className="pr-2">
+                      <span className="font-semibold text-slate-700 leading-tight block">{food.name}</span>
+                      {food.isApi && <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider mt-1 inline-block">Global</span>}
+                      {food.isCustom && <span className="bg-sky-100 text-sky-700 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider mt-1 inline-block">My DB</span>}
+                    </div>
+                    <span className="text-sm font-bold text-slate-400 whitespace-nowrap">{Math.round(food.calories)} kcal</span>
                   </div>
                 ))}
-                {searchQuery && filteredFoods.length === 0 && (
+                
+                {!isSearchingAPI && searchQuery && combinedResults.length === 0 && (
                   <div className="text-center text-slate-400 py-4 text-sm">
-                    No foods found.
+                    No foods found matching "{searchQuery}"
                   </div>
                 )}
               </div>
             </div>
+
           </div>
         )}
 
