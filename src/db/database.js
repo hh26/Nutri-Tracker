@@ -1,107 +1,195 @@
-import Dexie from 'dexie';
+import { supabase } from './supabase';
 
-export const db = new Dexie('TamilNutriTrackDB');
+// ==========================================
+// AUTHENTICATION HELPER
+// ==========================================
+async function getCurrentUser() {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) throw new Error("You must be logged in to save data.");
+  return user.id;
+}
 
-db.version(4).stores({ // Make sure to increase this version number!
-  logs: '++id, date, mealType, foodName',
-  combos: '++id, name',
-  customFoods: '++id, name' // New table for user-added foods
-}).upgrade(tx => {
-  // Handles upgrades automatically
-});
-
-export async function logMeal(entry) {
+export async function logMeal(mealData) {
   try {
-    await db.logs.add({
-      date: entry.date || new Date().toISOString().split('T')[0],
-      mealType: entry.mealType,
-      foodName: entry.foodName,
-      calories: entry.calories,
-      protein: entry.protein,
-      carbs: entry.carbs,
-      fats: entry.fats,
-      // Save original inputs so we can edit them later!
-      inputAmount: entry.inputAmount,
-      inputMetric: entry.inputMetric,
-      baseFood: entry.baseFood, 
-      timestamp: Date.now()
-    });
+    const userId = await getCurrentUser();
+    
+    // Send data to Supabase instead of Dexie!
+    const { error } = await supabase
+      .from('logs')
+      .insert([{ 
+        user_id: userId, // Attach the data to this specific user
+        ...mealData 
+      }]);
+
+    if (error) throw error;
   } catch (error) {
     console.error("Failed to log meal:", error);
   }
 }
 
+export async function getDailyLogs(date) {
+  try {
+    const userId = await getCurrentUser();
+    
+    // Fetch only the logs for this user, on this specific date
+    const { data, error } = await supabase
+      .from('logs')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('date', date);
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error("Failed to fetch logs:", error);
+    return [];
+  }
+}
+
 export async function deleteMeal(id) {
-  await db.logs.delete(id);
+  try {
+    const userId = await getCurrentUser();
+    const { error } = await supabase
+      .from('logs')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error("Failed to delete meal:", error);
+  }
 }
 
-// NEW: Move an item to a different meal
-export async function moveMeal(id, newMealType) {
-  await db.logs.update(id, { mealType: newMealType });
+export async function moveMeal(id, targetMealType) {
+  try {
+    const userId = await getCurrentUser();
+    const { error } = await supabase
+      .from('logs')
+      .update({ mealType: targetMealType })
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error("Failed to move meal:", error);
+  }
 }
 
-// NEW: Copy an item to another meal (or same meal)
-export async function copyMeal(log, targetMealType) {
-  const { id, ...logWithoutId } = log; // Remove old ID so Dexie makes a new one
-  logWithoutId.mealType = targetMealType;
-  logWithoutId.timestamp = Date.now();
-  await db.logs.add(logWithoutId);
+export async function copyMeal(logData, targetMealType) {
+  try {
+    const userId = await getCurrentUser();
+    
+    // Remove the old 'id' and 'created_at' from the copied data so Supabase generates new ones
+    const { id, created_at, ...cleanLogData } = logData;
+
+    const { error } = await supabase
+      .from('logs')
+      .insert([{
+        ...cleanLogData,
+        user_id: userId,
+        mealType: targetMealType
+      }]);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error("Failed to copy meal:", error);
+  }
 }
 
-// Add this to the bottom of src/db/database.js
 export async function updateMeal(id, updatedData) {
   try {
-    await db.logs.update(id, updatedData);
+    const userId = await getCurrentUser();
+    const { error } = await supabase
+      .from('logs')
+      .update(updatedData)
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
   } catch (error) {
     console.error("Failed to update meal:", error);
   }
 }
 
 export async function getWeeklyData(endDate = new Date()) {
-  const logs = await db.logs.toArray();
-  
-  // Create an array of 7 days ending on the provided endDate
-  const sevenDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(endDate);
-    d.setDate(d.getDate() - (6 - i)); // Go back 6 days up to the endDate
-    return d.toISOString().split('T')[0];
-  });
+  try {
+    const userId = await getCurrentUser();
 
-  // Group logs by day and sum the macros
-  const weeklyStats = sevenDays.map(date => {
-    const dayLogs = logs.filter(log => log.date === date);
+    // 1. Create an array of 7 days ending on the provided endDate
+    const sevenDays = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(endDate);
+      d.setDate(d.getDate() - (6 - i)); // Go back 6 days up to the endDate
+      return d.toISOString().split('T')[0];
+    });
+
+    const startDateStr = sevenDays[0];
+    const endDateStr = sevenDays[6];
+
+    // 2. Ask Supabase ONLY for the logs belonging to this user within this exact 7-day window
+    const { data: logs, error } = await supabase
+      .from('logs')
+      .select('date, calories, protein, carbs, fats') // Optimize payload to just what we need
+      .eq('user_id', userId)
+      .gte('date', startDateStr)
+      .lte('date', endDateStr);
+
+    if (error) throw error;
+
+    const safeLogs = logs || [];
+
+    // 3. Group logs by day and sum the macros (exactly like your original UI expects)
+    const weeklyStats = sevenDays.map(date => {
+      const dayLogs = safeLogs.filter(log => log.date === date);
+      
+      // Get short day name (e.g., "Mon", "Tue")
+      const dateObj = new Date(date + 'T12:00:00Z'); 
+      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+
+      const totals = dayLogs.reduce((acc, log) => ({
+        calories: acc.calories + (log.calories || 0),
+        protein: acc.protein + (log.protein || 0),
+        carbs: acc.carbs + (log.carbs || 0),
+        fats: acc.fats + (log.fats || 0)
+      }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
+
+      return {
+        name: dayName,
+        fullDate: date, // Keep full date for the UI
+        Calories: Math.round(totals.calories),
+        Protein: Math.round(totals.protein),
+        Carbs: Math.round(totals.carbs),
+        Fats: Math.round(totals.fats)
+      };
+    });
+
+    return weeklyStats;
+
+  } catch (error) {
+    console.error("Failed to fetch weekly data:", error);
     
-    // Get short day name (e.g., "Mon", "Tue")
-    // Note: We use UTC to avoid timezone shifting issues when building the labels
-    const dateObj = new Date(date + 'T12:00:00Z'); 
-    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-
-    const totals = dayLogs.reduce((acc, log) => ({
-      calories: acc.calories + log.calories,
-      protein: acc.protein + log.protein,
-      carbs: acc.carbs + log.carbs,
-      fats: acc.fats + log.fats
-    }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
-
-    return {
-      name: dayName,
-      fullDate: date, // Keep full date for the UI
-      Calories: Math.round(totals.calories),
-      Protein: Math.round(totals.protein),
-      Carbs: Math.round(totals.carbs),
-      Fats: Math.round(totals.fats)
-    };
-  });
-
-  return weeklyStats;
+    // Fallback: return an empty 7-day structure so your charts don't crash if offline
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(endDate);
+      d.setDate(d.getDate() - (6 - i));
+      const dateStr = d.toISOString().split('T')[0];
+      const dateObj = new Date(dateStr + 'T12:00:00Z');
+      return {
+        name: dateObj.toLocaleDateString('en-US', { weekday: 'short' }),
+        fullDate: dateStr,
+        Calories: 0, Protein: 0, Carbs: 0, Fats: 0
+      };
+    });
+  }
 }
 
-export async function saveCombo(comboName, foodItems) {
+export async function saveCombo(name, items, timestamp = new Date().toISOString()) {
   try {
-    // Calculate total macros factoring in whether the user selected 'grams' or 'units'
-    const totals = foodItems.reduce((acc, item) => {
+    const userId = await getCurrentUser();
+    
+    // Calculate total calories AND macros
+    const totals = items.reduce((acc, item) => {
       const ratio = item.metric === 'grams' ? (item.amount / item.baseWeight) : item.amount;
-      
       return {
         calories: acc.calories + (item.calories * ratio),
         protein: acc.protein + (item.protein * ratio),
@@ -110,40 +198,65 @@ export async function saveCombo(comboName, foodItems) {
       };
     }, { calories: 0, protein: 0, carbs: 0, fats: 0 });
 
-    await db.combos.add({
-      name: comboName,
-      items: foodItems, // Store items with their amount & metric
-      calories: totals.calories,
-      protein: totals.protein,
-      carbs: totals.carbs,
-      fats: totals.fats,
-      isCombo: true, 
-      baseUnit: "1 Combo",
-      baseWeight: 1 
-    });
+    const { error } = await supabase
+      .from('combos')
+      .insert([{
+        user_id: userId,
+        name: name,
+        items: items,
+        calories: totals.calories,
+        protein: totals.protein,
+        carbs: totals.carbs,
+        fats: totals.fats,
+        isCombo: true,
+        created_at: timestamp
+      }]);
+
+    if (error) throw error;
   } catch (error) {
     console.error("Failed to save combo:", error);
   }
 }
 
 export async function getCombos() {
-  return await db.combos.toArray();
+  try {
+    const userId = await getCurrentUser();
+    const { data, error } = await supabase
+      .from('combos')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error("Failed to fetch combos:", error);
+    return [];
+  }
 }
 
 // Add to the bottom of src/db/database.js
 
 export async function deleteCombo(id) {
   try {
-    await db.combos.delete(id);
+    const userId = await getCurrentUser();
+    const { error } = await supabase
+      .from('combos')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
   } catch (error) {
     console.error("Failed to delete combo:", error);
   }
 }
 
-export async function updateCombo(id, comboName, foodItems) {
+export async function updateCombo(id, name, items, timestamp = new Date().toISOString()) {
   try {
-    // Recalculate macros just in case quantities were changed during edit
-    const totals = foodItems.reduce((acc, item) => {
+    const userId = await getCurrentUser();
+    
+    // Calculate total calories AND macros
+    const totals = items.reduce((acc, item) => {
       const ratio = item.metric === 'grams' ? (item.amount / item.baseWeight) : item.amount;
       return {
         calories: acc.calories + (item.calories * ratio),
@@ -153,14 +266,21 @@ export async function updateCombo(id, comboName, foodItems) {
       };
     }, { calories: 0, protein: 0, carbs: 0, fats: 0 });
 
-    await db.combos.update(id, {
-      name: comboName,
-      items: foodItems,
-      calories: totals.calories,
-      protein: totals.protein,
-      carbs: totals.carbs,
-      fats: totals.fats
-    });
+    const { error } = await supabase
+      .from('combos')
+      .update({ 
+        name: name, 
+        items: items, 
+        calories: totals.calories,
+        protein: totals.protein,
+        carbs: totals.carbs,
+        fats: totals.fats,
+        created_at: timestamp
+      })
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
   } catch (error) {
     console.error("Failed to update combo:", error);
   }
@@ -168,19 +288,72 @@ export async function updateCombo(id, comboName, foodItems) {
 
 export async function saveCustomFood(foodItem) {
   try {
-    await db.customFoods.add({
-      ...foodItem,
-      isCustom: true // Flag to identify it in search
-    });
+    // 1. Get the ID of the person currently logged in
+    const userId = await getCurrentUser(); 
+
+    // 2. Send the data to the 'custom_foods' table in Supabase
+    const { error } = await supabase
+      .from('custom_foods')
+      .insert([{
+        user_id: userId, // CRITICAL: This ties the food to this specific user
+        ...foodItem,
+        isCustom: true   // Keep this flag so your search modal still recognizes it!
+      }]);
+
+    if (error) throw error;
   } catch (error) {
     console.error("Failed to save custom food:", error);
   }
 }
 
 export async function getCustomFoods() {
-  return await db.customFoods.toArray();
+  try {
+    const userId = await getCurrentUser();
+    const { data, error } = await supabase
+      .from('custom_foods')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error("Failed to fetch custom foods:", error);
+    return [];
+  }
 }
 
 export async function deleteCustomFood(id) {
-  await db.customFoods.delete(id);
+  try {
+    const userId = await getCurrentUser();
+    
+    const { error } = await supabase
+      .from('custom_foods')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error("Failed to delete custom food:", error);
+  }
+}
+
+// Add this anywhere in your database.js file
+export async function getRecentLogs(limitCount = 50) {
+  try {
+    const userId = await getCurrentUser();
+    
+    const { data, error } = await supabase
+      .from('logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false }) // Gets the newest logs first
+      .limit(limitCount);
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error("Failed to fetch recent logs:", error);
+    return [];
+  }
 }

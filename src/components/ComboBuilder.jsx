@@ -149,10 +149,15 @@ export default function ComboBuilder() {
     setTimeout(() => setSuccessMsg(''), 3000);
   };
 
-  const totalCalories = selectedItems.reduce((sum, item) => {
+  const totals = selectedItems.reduce((acc, item) => {
     const ratio = item.metric === 'grams' ? (item.amount / item.baseWeight) : item.amount;
-    return sum + (item.calories * ratio);
-  }, 0);
+    return {
+      calories: acc.calories + (item.calories * ratio),
+      protein: acc.protein + (item.protein * ratio),
+      carbs: acc.carbs + (item.carbs * ratio),
+      fats: acc.fats + (item.fats * ratio)
+    };
+  }, { calories: 0, protein: 0, carbs: 0, fats: 0 });
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-24 animate-in fade-in">
@@ -198,7 +203,12 @@ export default function ComboBuilder() {
                     <div className="flex justify-between items-start">
                       <div>
                         <h3 className="font-bold text-lg text-slate-800">{combo.name}</h3>
-                        <p className="text-green-600 font-semibold text-sm mt-0.5">{Math.round(combo.calories)} kcal</p>
+                        <p className="text-green-600 font-semibold text-sm mt-0.5">
+                          {Math.round(combo.calories)} kcal
+                          <span className="text-slate-400 font-medium ml-2">
+                            (P: {Math.round(combo.protein || 0)}g • C: {Math.round(combo.carbs || 0)}g • F: {Math.round(combo.fats || 0)}g)
+                          </span>
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button onClick={() => handleEditCombo(combo)} className="p-2 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
@@ -284,9 +294,16 @@ export default function ComboBuilder() {
                 })}
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center font-bold text-xl">
-                <span className="text-slate-800">Total:</span>
-                <span className="text-green-600">{Math.round(totalCalories)} kcal</span>
+              <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                <div className="flex justify-between items-center font-bold text-xl">
+                  <span className="text-slate-800">Total:</span>
+                  <span className="text-green-600">{Math.round(totals.calories)} kcal</span>
+                </div>
+                <div className="flex justify-between items-center text-sm font-medium text-slate-500 bg-slate-50 px-3 py-2 rounded-lg">
+                  <span>Protein: {Math.round(totals.protein)}g</span>
+                  <span>Carbs: {Math.round(totals.carbs)}g</span>
+                  <span>Fats: {Math.round(totals.fats)}g</span>
+                </div>
               </div>
 
               <button 

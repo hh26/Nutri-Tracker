@@ -1,13 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BookOpen, BarChart2, Layers, Utensils } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import Analytics from './components/Analytics';
 import ComboBuilder from './components/ComboBuilder';
 import CustomFood from './components/CustomFood';
+import { supabase } from './db/supabase';
+import Auth from './components/Auth';
 
 function App() {
+  const [session, setSession] = useState(null);
   const [activeTab, setActiveTab] = useState('diary');
   
+  useEffect(() => {
+    // Check if they are already logged in when they open the app
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    // Listen for logins/logouts
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // If there is no session, show the Auth screen
+  if (!session) {
+    return <Auth onLogin={(user) => console.log("Logged in!", user)} />;
+  }
+
   return (
     <div className="antialiased h-screen overflow-y-auto bg-slate-50 relative">
       

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Coffee, Sun, Moon, Utensils, ChevronLeft, ChevronRight } from 'lucide-react';
-import { db, deleteMeal, moveMeal, copyMeal, updateMeal } from '../db/database';
+import {deleteMeal, moveMeal, copyMeal, updateMeal, getDailyLogs } from '../db/database';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
 
@@ -24,7 +24,9 @@ export default function Dashboard() {
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
 
   const refreshData = async () => {
-    const dailyLogs = await db.logs.where('date').equals(viewDate).toArray();
+    // We now use the new function from database.js
+    const dailyLogs = await getDailyLogs(viewDate); 
+    
     setLogs(dailyLogs);
     
     const totals = dailyLogs.reduce((acc, log) => ({

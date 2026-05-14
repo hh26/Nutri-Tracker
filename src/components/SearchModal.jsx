@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, Clock, Loader2 } from 'lucide-react';
-import { db, getCombos, logMeal, getCustomFoods } from '../db/database';
+import { getCombos, logMeal, getCustomFoods, getRecentLogs } from '../db/database';
 
 // Add your Edamam keys here!
 const EDAMAM_APP_ID = import.meta.env.VITE_EDAMAM_APP_ID; 
@@ -21,12 +21,17 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
 
   useEffect(() => {
     if (isOpen) {
-      Promise.all([getCombos(), getCustomFoods()]).then(async ([combos, customFoodsData]) => {
+      // Fetch combos, custom foods, AND recent logs from Supabase all at the same time
+      Promise.all([
+        getCombos(), 
+        getCustomFoods(), 
+        getRecentLogs(50)
+      ]).then(([combos, customFoodsData, recentLogs]) => {
         setCustomCombos(combos);
         setUserFoods(customFoodsData);
         
+        // Calculate Recents from the Cloud Database History
         const allLocalItems = [...combos, ...customFoodsData];
-        const recentLogs = await db.logs.orderBy('id').reverse().limit(50).toArray();
         const uniqueFoodNames = [...new Set(recentLogs.map(log => log.foodName))];
         
         const recents = uniqueFoodNames
@@ -37,6 +42,7 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
         setRecentFoods(recents);
       });
     } else {
+      // Reset when closed
       setSearchQuery('');
       setSelectedFood(null);
       setInputAmount(1);

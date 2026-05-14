@@ -114,7 +114,7 @@ export default function Analytics() {
         
         <div className="bg-white p-5 rounded-3xl shadow-sm">
           <h3 className="font-bold text-lg mb-6">Calories Trend</h3>
-          <div className="h-64 w-full">
+          <div className="mt-4 h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
@@ -140,7 +140,7 @@ export default function Analytics() {
             </select>
           </div>
 
-          <div className="h-64 w-full">
+          <div className="mt-4 h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
