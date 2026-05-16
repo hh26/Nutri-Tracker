@@ -3,6 +3,7 @@ import { Coffee, Sun, Moon, Utensils, ChevronLeft, ChevronRight } from 'lucide-r
 import {deleteMeal, moveMeal, copyMeal, updateMeal, getDailyLogs } from '../db/database';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
+import LoadingSpinner from './LoadingSpinner'; // Add this at the top
 
 import MealSection from './MealSection';
 import SearchModal from './SearchModal';
@@ -22,9 +23,10 @@ export default function Dashboard() {
   
   const [selectedLog, setSelectedLog] = useState(null);
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // NEW
 
   const refreshData = async () => {
-    // We now use the new function from database.js
+    setIsLoading(true); // Start loading
     const dailyLogs = await getDailyLogs(viewDate); 
     
     setLogs(dailyLogs);
@@ -37,6 +39,7 @@ export default function Dashboard() {
     }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
     
     setDailyTotals(totals);
+    setIsLoading(false); // Stop loading
   };
 
   useEffect(() => {
@@ -83,34 +86,39 @@ export default function Dashboard() {
       <header className="bg-white px-6 pt-10 pb-6 rounded-b-3xl shadow-sm">
         
         {/* Title & Date Navigator Row */}
-        <div className="flex justify-between items-start w-full">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">{pageTitle}</h1>
+        <div className="flex flex-col items-center justify-center w-full">
+          
+          <h1 className="text-2xl font-bold text-slate-800 text-center">
+            {pageTitle}
+          </h1>
+          
+          <div className="flex items-center justify-center gap-2 mt-3">
+            <button 
+              onClick={() => adjustDate(-1)} 
+              className="p-1.5 bg-slate-50 text-slate-500 rounded-full hover:bg-slate-100 active:scale-95 transition-all border border-slate-100"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
             
-            <div className="flex items-center gap-1 mt-2">
-              <button onClick={() => adjustDate(-1)} className="p-1.5 bg-slate-50 text-slate-500 rounded-full hover:bg-slate-100 active:scale-95 transition-all border border-slate-100">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              
-              <div className="relative">
-                <input 
-                  type="date" 
-                  max={todayDateStr}
-                  value={viewDate}
-                  onChange={(e) => setViewDate(e.target.value)}
-                  className="bg-slate-50 text-slate-600 text-sm font-bold py-1.5 px-3 rounded-xl border border-slate-100 outline-none cursor-pointer"
-                />
-              </div>
-
-              <button 
-                onClick={() => adjustDate(1)} 
-                disabled={isToday}
-                className={`p-1.5 rounded-full transition-all border ${isToday ? 'bg-transparent text-slate-300 border-transparent' : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100 active:scale-95'}`}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+            <div className="relative">
+              <input 
+                type="date" 
+                max={todayDateStr}
+                value={viewDate}
+                onChange={(e) => setViewDate(e.target.value)}
+                className="bg-slate-50 text-slate-600 text-sm font-bold py-1.5 px-3 rounded-xl border border-slate-100 outline-none cursor-pointer text-center"
+              />
             </div>
+
+            <button 
+              onClick={() => adjustDate(1)} 
+              disabled={isToday}
+              className={`p-1.5 rounded-full transition-all border ${isToday ? 'bg-transparent text-slate-300 border-transparent' : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100 active:scale-95'}`}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
+          
         </div>
 
         {/* Prominent Centered Progress Ring */}
@@ -147,11 +155,18 @@ export default function Dashboard() {
         
       </header>
 
-      <main className="px-4 mt-6 space-y-4">
-        <MealSection title="Breakfast" icon={<Coffee className="w-5 h-5 text-amber-600" />} logs={logs.filter(log => log.mealType === 'Breakfast')} onOpenSearch={() => handleOpenSearch("Breakfast")} onLogClick={handleLogClick} />
-        <MealSection title="Lunch" icon={<Sun className="w-5 h-5 text-orange-500" />} logs={logs.filter(log => log.mealType === 'Lunch')} onOpenSearch={() => handleOpenSearch("Lunch")} onLogClick={handleLogClick} />
-        <MealSection title="Snacks" icon={<Utensils className="w-5 h-5 text-purple-500" />} logs={logs.filter(log => log.mealType === 'Snacks')} onOpenSearch={() => handleOpenSearch("Snacks")} onLogClick={handleLogClick} />
-        <MealSection title="Dinner" icon={<Moon className="w-5 h-5 text-indigo-500" />} logs={logs.filter(log => log.mealType === 'Dinner')} onOpenSearch={() => handleOpenSearch("Dinner")} onLogClick={handleLogClick} />
+      <main className="px-4 mt-6 space-y-4 relative min-h-[300px]">
+        {isLoading ? (
+          <LoadingSpinner message="Fetching Diary..." />
+        ) : (
+          <>
+            <MealSection title="Breakfast" icon={<Coffee className="w-5 h-5 text-amber-600" />} logs={logs.filter(log => log.mealType === 'Breakfast')} onOpenSearch={() => handleOpenSearch("Breakfast")} onLogClick={handleLogClick} />
+            <MealSection title="Lunch" icon={<Sun className="w-5 h-5 text-orange-500" />} logs={logs.filter(log => log.mealType === 'Lunch')} onOpenSearch={() => handleOpenSearch("Lunch")} onLogClick={handleLogClick} />
+            <MealSection title="Snacks" icon={<Utensils className="w-5 h-5 text-purple-500" />} logs={logs.filter(log => log.mealType === 'Snacks')} onOpenSearch={() => handleOpenSearch("Snacks")} onLogClick={handleLogClick} />
+            <MealSection title="Dinner" icon={<Moon className="w-5 h-5 text-indigo-500" />} logs={logs.filter(log => log.mealType === 'Dinner')} onOpenSearch={() => handleOpenSearch("Dinner")} onLogClick={handleLogClick} />
+            <div className="h-16 shrink-0"></div>
+          </>
+        )}
       </main>
 
       <SearchModal 

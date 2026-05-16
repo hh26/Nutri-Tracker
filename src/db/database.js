@@ -338,6 +338,22 @@ export async function deleteCustomFood(id) {
   }
 }
 
+export async function updateCustomFood(id, updatedData) {
+  try {
+    const userId = await getCurrentUser();
+    
+    const { error } = await supabase
+      .from('custom_foods')
+      .update(updatedData)
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error("Failed to update custom food:", error);
+  }
+}
+
 // Add this anywhere in your database.js file
 export async function getRecentLogs(limitCount = 50) {
   try {

@@ -2,24 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getWeeklyData } from '../db/database';
+import LoadingSpinner from './LoadingSpinner';
 
 export default function Analytics() {
   const [data, setData] = useState([]);
   const [selectedMacro, setSelectedMacro] = useState('Protein');
   
-  // NEW: State to track the end date of our 7-day window
   const [currentEndDate, setCurrentEndDate] = useState(new Date());
+  const [isLoading, setIsLoading] = useState(true);
+
+  // NEW: State to track if we should skip empty days in the average
+  const [skipEmptyDays, setSkipEmptyDays] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
-      // Pass the currentEndDate to our updated database function
+      setIsLoading(true); 
       const stats = await getWeeklyData(currentEndDate);
       setData(stats);
+      setIsLoading(false); 
     };
     fetchData();
-  }, [currentEndDate]); // Re-run whenever the date changes
+  }, [currentEndDate]); 
 
-  // Helper functions to shift the date by 7 days
   const handlePreviousWeek = () => {
     const newDate = new Date(currentEndDate);
     newDate.setDate(newDate.getDate() - 7);
@@ -30,27 +34,43 @@ export default function Analytics() {
     const newDate = new Date(currentEndDate);
     newDate.setDate(newDate.getDate() + 7);
     
-    // Prevent going into the future beyond today
     if (newDate <= new Date()) {
       setCurrentEndDate(newDate);
     } else {
-      setCurrentEndDate(newDate); // Reset to exactly today if they try to over-click
+      setCurrentEndDate(new Date()); 
     }
   };
 
-  // Helper to check if we are viewing the current week (to disable the Next button)
   const isCurrentWeek = () => {
     const today = new Date();
     return currentEndDate.toDateString() === today.toDateString();
   };
 
-  // Calculate 7-day averages based on the currently viewed data
-  const averages = data.reduce((acc, day) => ({
-    calories: acc.calories + day.Calories / 7,
-    protein: acc.protein + day.Protein / 7,
-    carbs: acc.carbs + day.Carbs / 7,
-    fats: acc.fats + day.Fats / 7,
+  // --- THE NEW MATH LOGIC ---
+  
+  // 1. First, calculate the total sum of all macros for the week
+  const totals = data.reduce((acc, day) => ({
+    calories: acc.calories + (day.Calories || 0),
+    protein: acc.protein + (day.Protein || 0),
+    carbs: acc.carbs + (day.Carbs || 0),
+    fats: acc.fats + (day.Fats || 0),
   }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
+
+  // 2. Count how many days actually have tracked data (calories > 0)
+  const activeDaysCount = data.filter(day => day.Calories > 0).length;
+
+  // 3. Determine our divisor. 
+  // If skipping empty days, use the active count (fallback to 1 to prevent dividing by zero). 
+  // Otherwise, use 7.
+  const divisor = skipEmptyDays ? Math.max(1, activeDaysCount) : 7;
+
+  // 4. Calculate the final averages
+  const averages = {
+    calories: totals.calories / divisor,
+    protein: totals.protein / divisor,
+    carbs: totals.carbs / divisor,
+    fats: totals.fats / divisor,
+  };
 
   const getMacroColor = () => {
     switch (selectedMacro) {
@@ -61,7 +81,6 @@ export default function Analytics() {
     }
   };
 
-  // Format the date range for the header (e.g., "Oct 12 - Oct 18")
   const dateRangeString = data.length > 0 
     ? `${new Date(data[0].fullDate + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(data[data.length-1].fullDate + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
     : '';
@@ -70,7 +89,6 @@ export default function Analytics() {
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-24 animate-in fade-in">
       <header className="bg-white px-6 pt-10 pb-6 rounded-b-3xl shadow-sm">
         
-        {/* NEW: Date Navigator UI */}
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-bold">Weekly Overview</h1>
           <div className="flex items-center gap-2 bg-slate-50 rounded-full p-1 border border-slate-100">
@@ -87,71 +105,95 @@ export default function Analytics() {
           </div>
         </div>
         
-        {/* Shows the dynamic date range */}
-        <p className="text-slate-500 text-sm font-medium">{dateRangeString}</p>
+        <div className="flex justify-between items-center mt-1">
+          <p className="text-slate-500 text-sm font-medium">
+            {isLoading ? 'Calculating dates...' : dateRangeString}
+          </p>
+
+          {/* NEW: iOS Style Toggle Switch */}
+          <div className="flex items-center gap-2">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${skipEmptyDays ? 'text-green-600' : 'text-slate-400'}`}>
+              Active Days Only
+            </span>
+            <button 
+              onClick={() => setSkipEmptyDays(!skipEmptyDays)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 ${skipEmptyDays ? 'bg-green-500' : 'bg-slate-200'}`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${skipEmptyDays ? 'translate-x-5' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        </div>
         
         <div className="grid grid-cols-4 gap-2 mt-6 text-center">
-          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-            <div className="text-xl font-bold text-green-600">{Math.round(averages.calories)}</div>
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 transition-colors">
+            <div className="text-xl font-bold text-green-600">{isLoading ? '-' : Math.round(averages.calories)}</div>
             <div className="text-xs text-slate-500 mt-1">Kcal</div>
           </div>
-          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-            <div className="text-lg font-bold text-red-500">{Math.round(averages.protein)}</div>
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 transition-colors">
+            <div className="text-lg font-bold text-red-500">{isLoading ? '-' : Math.round(averages.protein)}</div>
             <div className="text-xs text-slate-500 mt-1">Prot</div>
           </div>
-          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-            <div className="text-lg font-bold text-blue-500">{Math.round(averages.carbs)}</div>
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 transition-colors">
+            <div className="text-lg font-bold text-blue-500">{isLoading ? '-' : Math.round(averages.carbs)}</div>
             <div className="text-xs text-slate-500 mt-1">Carb</div>
           </div>
-          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-            <div className="text-lg font-bold text-yellow-500">{Math.round(averages.fats)}</div>
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 transition-colors">
+            <div className="text-lg font-bold text-yellow-500">{isLoading ? '-' : Math.round(averages.fats)}</div>
             <div className="text-xs text-slate-500 mt-1">Fat</div>
           </div>
         </div>
       </header>
 
       <main className="px-4 mt-6 space-y-6">
-        
-        <div className="bg-white p-5 rounded-3xl shadow-sm">
-          <h3 className="font-bold text-lg mb-6">Calories Trend</h3>
-          <div className="mt-4 h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Bar dataKey="Calories" fill="#22c55e" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        {isLoading ? (
+          <LoadingSpinner message="Crunching Weekly Data..." />
+        ) : (
+          <>
+            <div className="bg-white p-5 rounded-3xl shadow-sm animate-in fade-in slide-in-from-bottom-4">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-lg">Calories Trend</h3>
+                {/* Optional indicator of how many days are active */}
+                {skipEmptyDays && <span className="bg-green-50 text-green-600 text-xs font-bold px-2 py-1 rounded-lg border border-green-100">{activeDaysCount} Days Tracked</span>}
+              </div>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                    <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                    <Bar dataKey="Calories" fill="#22c55e" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
-        <div className="bg-white p-5 rounded-3xl shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-lg">Macros Trend</h3>
-            <select 
-              value={selectedMacro} 
-              onChange={(e) => setSelectedMacro(e.target.value)}
-              className="bg-slate-50 border border-slate-200 text-sm py-2 px-3 rounded-xl outline-none focus:border-slate-400 font-semibold text-slate-700 cursor-pointer"
-            >
-              <option value="Protein">Protein</option>
-              <option value="Carbs">Carbs</option>
-              <option value="Fats">Fats</option>
-            </select>
-          </div>
+            <div className="bg-white p-5 rounded-3xl shadow-sm animate-in fade-in slide-in-from-bottom-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-lg">Macros Trend</h3>
+                <select 
+                  value={selectedMacro} 
+                  onChange={(e) => setSelectedMacro(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-sm py-2 px-3 rounded-xl outline-none focus:border-slate-400 font-semibold text-slate-700 cursor-pointer"
+                >
+                  <option value="Protein">Protein</option>
+                  <option value="Carbs">Carbs</option>
+                  <option value="Fats">Fats</option>
+                </select>
+              </div>
 
-          <div className="mt-4 h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Bar dataKey={selectedMacro} fill={getMacroColor()} radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
+              <div className="mt-4 h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                    <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                    <Bar dataKey={selectedMacro} fill={getMacroColor()} radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, Clock, Loader2 } from 'lucide-react';
 import { getCombos, logMeal, getCustomFoods, getRecentLogs } from '../db/database';
+import LoadingSpinner from './LoadingSpinner';
 
 // Add your Edamam keys here!
 const EDAMAM_APP_ID = import.meta.env.VITE_EDAMAM_APP_ID; 
@@ -19,8 +20,11 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
   const [apiFoods, setApiFoods] = useState([]);
   const [isSearchingAPI, setIsSearchingAPI] = useState(false);
 
+  const [isLoading, setIsLoading] = useState(false); 
+
   useEffect(() => {
     if (isOpen) {
+      setIsLoading(true); // Start loading when opened
       // Fetch combos, custom foods, AND recent logs from Supabase all at the same time
       Promise.all([
         getCombos(), 
@@ -40,6 +44,7 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
           .slice(0, 6);
           
         setRecentFoods(recents);
+        setIsLoading(false); // Stop loading when all data arrives
       });
     } else {
       // Reset when closed
@@ -163,7 +168,12 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
             )}
           </div>
 
-          {searchQuery ? (
+          {/* Conditional Rendering Block Starts Here */}
+          {isLoading ? (
+            <div className="mt-10">
+               <LoadingSpinner message="Waking up Database..." />
+            </div>
+          ) : searchQuery ? (
             <div className="space-y-2">
               <h3 className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3 px-2">Search Results</h3>
               {combinedResults.map((food, idx) => (

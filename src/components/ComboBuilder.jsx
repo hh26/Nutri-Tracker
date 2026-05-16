@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Trash2, Edit2, Plus, ChevronLeft, Loader2 } from 'lucide-react';
 import { saveCombo, getCombos, deleteCombo, updateCombo, getCustomFoods } from '../db/database';
+import LoadingSpinner from './LoadingSpinner';
 
 // Pulling keys securely from the .env file
 const EDAMAM_APP_ID = import.meta.env.VITE_EDAMAM_APP_ID;
@@ -22,6 +23,7 @@ export default function ComboBuilder() {
   const [userFoods, setUserFoods] = useState([]);
   const [apiFoods, setApiFoods] = useState([]);
   const [isSearchingAPI, setIsSearchingAPI] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Fetch initial local data
   useEffect(() => {
@@ -29,10 +31,12 @@ export default function ComboBuilder() {
   }, []);
 
   const fetchCombos = async () => {
+    setIsLoading(true); // Start loading
     const combos = await getCombos();
     const customFoodsData = await getCustomFoods();
     setSavedCombos(combos);
     setUserFoods(customFoodsData);
+    setIsLoading(false); // Stop loading
   };
 
   // Edamam API Search Logic with Debounce
@@ -196,7 +200,9 @@ export default function ComboBuilder() {
               <Plus className="w-5 h-5" /> Build New Combo
             </button>
 
-            {savedCombos.length > 0 ? (
+            {isLoading ? (
+              <LoadingSpinner message="Loading Combos..." />
+            ) : savedCombos.length > 0 ? (
               <div className="space-y-3">
                 {savedCombos.map(combo => (
                   <div key={combo.id} className="bg-white p-5 rounded-3xl shadow-sm flex flex-col gap-4">
