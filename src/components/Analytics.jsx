@@ -20,7 +20,7 @@ export default function Analytics() {
 
   const [goalProtein, setGoalProtein] = useState(() => {
     const saved = localStorage.getItem('userProteinGoal');
-    return saved ? parseInt(saved, 10) : 120; // Default to 120g if not set yet
+    return saved ? parseInt(saved, 10) : 120;
   });
 
   useEffect(() => {
@@ -72,12 +72,11 @@ export default function Analytics() {
     fats: totals.fats / divisor,
   };
 
-  // Base colors for the macros
   const getMacroColor = () => {
     switch (selectedMacro) {
-      case 'Protein': return '#ef4444'; // Red
-      case 'Carbs': return '#3b82f6';   // Blue
-      case 'Fats': return '#eab308';    // Yellow
+      case 'Protein': return '#ef4444'; 
+      case 'Carbs': return '#3b82f6';   
+      case 'Fats': return '#eab308';    
       default: return '#cbd5e1';
     }
   };
@@ -89,8 +88,6 @@ export default function Analytics() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-24 animate-in fade-in">
       <header className="bg-white px-6 pt-10 pb-6 rounded-b-3xl shadow-sm">
-        
-        {/* ... (Keep your existing Header code exactly as it is) ... */}
         
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-bold">Weekly Overview</h1>
@@ -172,9 +169,13 @@ export default function Analytics() {
                       label={{ position: 'insideTopRight', value: 'GOAL', fill: '#22c55e', fontSize: 10, fontWeight: 'bold', dy: -10 }}
                     />
 
+                    {/* NEW: Calories bar dynamic coloring */}
                     <Bar dataKey="Calories" radius={[6, 6, 0, 0]}>
                       {data.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.Calories > goalCalories ? '#ef4444' : '#22c55e'} />
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={entry.Calories >= goalCalories ? '#22c55e' : '#ef4444'} 
+                        />
                       ))}
                     </Bar>
                   </BarChart>
@@ -187,7 +188,6 @@ export default function Analytics() {
               <div className="flex justify-between items-start mb-6">
                 <div>
                   <h3 className="font-bold text-lg">Macros Trend</h3>
-                  {/* Only show the Goal text if Protein is selected */}
                   {selectedMacro === 'Protein' && (
                     <p className="text-xs font-semibold text-slate-400 mt-1">Daily Target: {goalProtein}g</p>
                   )}
@@ -210,7 +210,6 @@ export default function Analytics() {
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                     <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                     
-                    {/* ONLY render the goal line if Protein is selected */}
                     {selectedMacro === 'Protein' && (
                       <ReferenceLine 
                         y={goalProtein} 
@@ -231,12 +230,9 @@ export default function Analytics() {
                     <Bar dataKey={selectedMacro} radius={[6, 6, 0, 0]}>
                       {data.map((entry, index) => {
                         let barColor = getMacroColor();
-                        
-                        // If we are looking at protein, turn the bar GREEN if they successfully hit their goal!
                         if (selectedMacro === 'Protein') {
                           barColor = entry.Protein >= goalProtein ? '#22c55e' : '#ef4444'; 
                         }
-                        
                         return <Cell key={`macro-cell-${index}`} fill={barColor} />;
                       })}
                     </Bar>
