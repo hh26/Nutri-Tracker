@@ -1,20 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { Coffee, Sun, Moon, Utensils, ChevronLeft, ChevronRight } from 'lucide-react';
-import {deleteMeal, moveMeal, copyMeal, updateMeal, getDailyLogs } from '../db/database';
+import { deleteMeal, moveMeal, copyMeal, updateMeal, getDailyLogs } from '../db/database';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
-import LoadingSpinner from './LoadingSpinner'; // Add this at the top
+import LoadingSpinner from './LoadingSpinner';
+import GoalCalculator from './GoalCalculator';
 
 import MealSection from './MealSection';
 import SearchModal from './SearchModal';
 import ItemActionModal from './ItemActionModal';
 
-const GOAL_CALORIES = 2000;
 const todayDateStr = new Date().toISOString().split('T')[0];
 
 export default function Dashboard() {
   const [dailyTotals, setDailyTotals] = useState({ calories: 0, protein: 0, carbs: 0, fats: 0 });
   const [logs, setLogs] = useState([]);
+  
+  // 1. Calorie Goal State
+  const [goalCalories, setGoalCalories] = useState(() => {
+    const saved = localStorage.getItem('userCalorieGoal');
+    return saved ? parseInt(saved, 10) : 2000; 
+  });
+
+  // 2. NEW: Protein Goal State
+  const [goalProtein, setGoalProtein] = useState(() => {
+    const saved = localStorage.getItem('userProteinGoal');
+    return saved ? parseInt(saved, 10) : 120; // Default to 120g
+  });
   
   // Date and Modal State
   const [viewDate, setViewDate] = useState(todayDateStr);
@@ -23,10 +35,22 @@ export default function Dashboard() {
   
   const [selectedLog, setSelectedLog] = useState(null);
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true); // NEW
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 3. UPDATED: When a new goal is applied, update BOTH states in the Dashboard
+  const handleNewGoal = (calculatedGoal) => {
+    setGoalCalories(calculatedGoal);
+    
+    // The GoalCalculator saves the protein goal to localStorage right before calling this function,
+    // so we can just grab it directly from storage to update our UI instantly!
+    const updatedProtein = localStorage.getItem('userProteinGoal');
+    if (updatedProtein) {
+      setGoalProtein(parseInt(updatedProtein, 10));
+    }
+  };
 
   const refreshData = async () => {
-    setIsLoading(true); // Start loading
+    setIsLoading(true); 
     const dailyLogs = await getDailyLogs(viewDate); 
     
     setLogs(dailyLogs);
@@ -39,7 +63,7 @@ export default function Dashboard() {
     }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
     
     setDailyTotals(totals);
-    setIsLoading(false); // Stop loading
+    setIsLoading(false); 
   };
 
   useEffect(() => {
@@ -79,10 +103,11 @@ export default function Dashboard() {
     setIsActionModalOpen(true);
   };
 
-  const progressPercentage = Math.min((dailyTotals.calories / GOAL_CALORIES) * 100, 100);
+  const progressPercentage = Math.min((dailyTotals.calories / goalCalories) * 100, 100);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-20 relative animate-in fade-in">
+      <GoalCalculator onSaveGoal={handleNewGoal} />
       <header className="bg-white px-6 pt-10 pb-6 rounded-b-3xl shadow-sm">
         
         {/* Title & Date Navigator Row */}
@@ -141,15 +166,15 @@ export default function Dashboard() {
             </span>
             <div className="w-8 h-1 bg-slate-100 rounded-full my-2"></div>
             <span className="text-xs text-slate-400 font-medium">
-              Goal: {GOAL_CALORIES}
+              Goal: {goalCalories}
             </span>
           </div>
         </div>
 
-        {/* Macro Summary */}
+        {/* 4. UPDATED: Pass the goalProtein down to the Protein MacroCard */}
         <div className="flex justify-between w-full max-w-sm px-2 mt-2 mx-auto">
           <MacroCard label="Carbs" value={dailyTotals.carbs} color="bg-blue-500" />
-          <MacroCard label="Protein" value={dailyTotals.protein} color="bg-red-500" />
+          <MacroCard label="Protein" value={dailyTotals.protein} goal={goalProtein} color="bg-red-500" />
           <MacroCard label="Fats" value={dailyTotals.fats} color="bg-yellow-500" />
         </div>
         
@@ -190,10 +215,15 @@ export default function Dashboard() {
   );
 }
 
-function MacroCard({ label, value, color }) {
+// 5. UPDATED: MacroCard now accepts an optional 'goal' prop and formats it cleanly
+function MacroCard({ label, value, goal, color }) {
   return (
     <div className="flex flex-col items-center">
-      <div className="text-lg font-semibold">{Math.round(value)}g</div>
+      <div className="text-lg font-semibold text-slate-800">
+        {Math.round(value)}
+        {goal && <span className="text-sm text-slate-400 font-medium"> / {goal}</span>}
+        <span className="text-sm font-medium">g</span>
+      </div>
       <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
         <div className={`w-2 h-2 rounded-full ${color}`}></div>
         {label}

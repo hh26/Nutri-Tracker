@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getWeeklyData } from '../db/database';
 import LoadingSpinner from './LoadingSpinner';
@@ -10,9 +10,18 @@ export default function Analytics() {
   
   const [currentEndDate, setCurrentEndDate] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
-
-  // NEW: State to track if we should skip empty days in the average
   const [skipEmptyDays, setSkipEmptyDays] = useState(false);
+
+  // 1. Pull Goals from Local Storage
+  const [goalCalories, setGoalCalories] = useState(() => {
+    const saved = localStorage.getItem('userCalorieGoal');
+    return saved ? parseInt(saved, 10) : 2000;
+  });
+
+  const [goalProtein, setGoalProtein] = useState(() => {
+    const saved = localStorage.getItem('userProteinGoal');
+    return saved ? parseInt(saved, 10) : 120; // Default to 120g if not set yet
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -46,9 +55,6 @@ export default function Analytics() {
     return currentEndDate.toDateString() === today.toDateString();
   };
 
-  // --- THE NEW MATH LOGIC ---
-  
-  // 1. First, calculate the total sum of all macros for the week
   const totals = data.reduce((acc, day) => ({
     calories: acc.calories + (day.Calories || 0),
     protein: acc.protein + (day.Protein || 0),
@@ -56,15 +62,9 @@ export default function Analytics() {
     fats: acc.fats + (day.Fats || 0),
   }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
 
-  // 2. Count how many days actually have tracked data (calories > 0)
   const activeDaysCount = data.filter(day => day.Calories > 0).length;
-
-  // 3. Determine our divisor. 
-  // If skipping empty days, use the active count (fallback to 1 to prevent dividing by zero). 
-  // Otherwise, use 7.
   const divisor = skipEmptyDays ? Math.max(1, activeDaysCount) : 7;
 
-  // 4. Calculate the final averages
   const averages = {
     calories: totals.calories / divisor,
     protein: totals.protein / divisor,
@@ -72,11 +72,12 @@ export default function Analytics() {
     fats: totals.fats / divisor,
   };
 
+  // Base colors for the macros
   const getMacroColor = () => {
     switch (selectedMacro) {
-      case 'Protein': return '#ef4444';
-      case 'Carbs': return '#3b82f6';
-      case 'Fats': return '#eab308';
+      case 'Protein': return '#ef4444'; // Red
+      case 'Carbs': return '#3b82f6';   // Blue
+      case 'Fats': return '#eab308';    // Yellow
       default: return '#cbd5e1';
     }
   };
@@ -88,6 +89,8 @@ export default function Analytics() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-24 animate-in fade-in">
       <header className="bg-white px-6 pt-10 pb-6 rounded-b-3xl shadow-sm">
+        
+        {/* ... (Keep your existing Header code exactly as it is) ... */}
         
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-bold">Weekly Overview</h1>
@@ -110,7 +113,6 @@ export default function Analytics() {
             {isLoading ? 'Calculating dates...' : dateRangeString}
           </p>
 
-          {/* NEW: iOS Style Toggle Switch */}
           <div className="flex items-center gap-2">
             <span className={`text-[10px] font-bold uppercase tracking-wider ${skipEmptyDays ? 'text-green-600' : 'text-slate-400'}`}>
               Active Days Only
@@ -149,27 +151,47 @@ export default function Analytics() {
           <LoadingSpinner message="Crunching Weekly Data..." />
         ) : (
           <>
+            {/* --- CALORIES CHART --- */}
             <div className="bg-white p-5 rounded-3xl shadow-sm animate-in fade-in slide-in-from-bottom-4">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="font-bold text-lg">Calories Trend</h3>
-                {/* Optional indicator of how many days are active */}
                 {skipEmptyDays && <span className="bg-green-50 text-green-600 text-xs font-bold px-2 py-1 rounded-lg border border-green-100">{activeDaysCount} Days Tracked</span>}
               </div>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
+                  <BarChart data={data} margin={{ top: 15, right: 0, left: -25, bottom: 0 }}>
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                     <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                    <Bar dataKey="Calories" fill="#22c55e" radius={[6, 6, 0, 0]} />
+                    
+                    <ReferenceLine 
+                      y={goalCalories} 
+                      stroke="#22c55e" 
+                      strokeDasharray="5 5" 
+                      strokeWidth={2}
+                      label={{ position: 'insideTopRight', value: 'GOAL', fill: '#22c55e', fontSize: 10, fontWeight: 'bold', dy: -10 }}
+                    />
+
+                    <Bar dataKey="Calories" radius={[6, 6, 0, 0]}>
+                      {data.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.Calories > goalCalories ? '#ef4444' : '#22c55e'} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
+            {/* --- MACROS CHART --- */}
             <div className="bg-white p-5 rounded-3xl shadow-sm animate-in fade-in slide-in-from-bottom-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-lg">Macros Trend</h3>
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h3 className="font-bold text-lg">Macros Trend</h3>
+                  {/* Only show the Goal text if Protein is selected */}
+                  {selectedMacro === 'Protein' && (
+                    <p className="text-xs font-semibold text-slate-400 mt-1">Daily Target: {goalProtein}g</p>
+                  )}
+                </div>
                 <select 
                   value={selectedMacro} 
                   onChange={(e) => setSelectedMacro(e.target.value)}
@@ -183,11 +205,42 @@ export default function Analytics() {
 
               <div className="mt-4 h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
+                  <BarChart data={data} margin={{ top: 15, right: 0, left: -25, bottom: 0 }}>
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                     <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                    <Bar dataKey={selectedMacro} fill={getMacroColor()} radius={[6, 6, 0, 0]} />
+                    
+                    {/* ONLY render the goal line if Protein is selected */}
+                    {selectedMacro === 'Protein' && (
+                      <ReferenceLine 
+                        y={goalProtein} 
+                        stroke="#ef4444" 
+                        strokeDasharray="5 5" 
+                        strokeWidth={2}
+                        label={{ 
+                          position: 'insideTopRight', 
+                          value: 'GOAL', 
+                          fill: '#ef4444', 
+                          fontSize: 10, 
+                          fontWeight: 'bold',
+                          dy: -10
+                        }}
+                      />
+                    )}
+
+                    <Bar dataKey={selectedMacro} radius={[6, 6, 0, 0]}>
+                      {data.map((entry, index) => {
+                        let barColor = getMacroColor();
+                        
+                        // If we are looking at protein, turn the bar GREEN if they successfully hit their goal!
+                        if (selectedMacro === 'Protein') {
+                          barColor = entry.Protein >= goalProtein ? '#22c55e' : '#ef4444'; 
+                        }
+                        
+                        return <Cell key={`macro-cell-${index}`} fill={barColor} />;
+                      })}
+                    </Bar>
+
                   </BarChart>
                 </ResponsiveContainer>
               </div>
