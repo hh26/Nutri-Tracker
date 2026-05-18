@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Search, Clock, Loader2 } from 'lucide-react';
 import { getCombos, logMeal, getCustomFoods, getRecentLogs } from '../db/database';
 import LoadingSpinner from './LoadingSpinner';
+import { supabase } from '../db/supabase'; // Adjust path as needed
 
 // Add your Edamam keys here!
 const EDAMAM_APP_ID = import.meta.env.VITE_EDAMAM_APP_ID; 
@@ -68,8 +69,28 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
 
     const delayDebounceFn = setTimeout(async () => {
       try {
-        // Updated URL for Edamam
-        const response = await fetch(`https://api.edamam.com/api/food-database/v2/parser?app_id=${EDAMAM_APP_ID}&app_key=${EDAMAM_APP_KEY}&ingr=${encodeURIComponent(searchQuery)}`);
+
+        // 1. Get the current user's session token securely
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          throw new Error("You must be logged in to search.");
+        }
+        
+        // 2. Hit your Vercel API proxy
+        const response = await fetch(`/api/food-search?query=${encodeURIComponent(searchQuery)}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            // Pass the token so the backend can verify it!
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch food data");
+        }
+
         const data = await response.json();
 
         // Map Edamam data to our app's standard format
