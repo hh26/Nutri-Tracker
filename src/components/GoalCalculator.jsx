@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Target, X, Calculator, Ruler, Weight, Activity, User } from 'lucide-react';
-// NEW: Import your database function
-import { saveUserProfile } from '../db/database'; 
+// IMPORT the getUserProfile function alongside saveUserProfile
+import { saveUserProfile, getUserProfile } from '../db/database'; 
 
 export default function GoalCalculator({ onSaveGoal }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false); // NEW: Loading state
+  const [isSaving, setIsSaving] = useState(false);
   
   // Form State
   const [gender, setGender] = useState('male');
@@ -15,6 +15,26 @@ export default function GoalCalculator({ onSaveGoal }) {
   const [activity, setActivity] = useState('1.2'); 
   
   const [result, setResult] = useState(null);
+
+  // NEW: Fetch user data when the component loads
+  useEffect(() => {
+    const loadSavedData = async () => {
+      const profile = await getUserProfile();
+      if (profile) {
+        // Pre-fill the form inputs
+        if (profile.gender) setGender(profile.gender);
+        if (profile.age) setAge(profile.age.toString());
+        if (profile.height) setHeight(profile.height.toString());
+        if (profile.weight) setWeight(profile.weight.toString());
+        if (profile.activity_level) setActivity(profile.activity_level.toString());
+        
+        // Pre-fill the result so they see their current goal first
+        if (profile.goal_calories) setResult(profile.goal_calories);
+      }
+    };
+    
+    loadSavedData();
+  }, []); // Runs once on mount
 
   const calculateCalories = (e) => {
     e.preventDefault();
@@ -38,7 +58,6 @@ export default function GoalCalculator({ onSaveGoal }) {
     setResult(tdee);
   };
 
-  // UPDATED: Now Async to handle database saving
   const handleSave = async () => {
     if (!result) return;
     
@@ -47,7 +66,7 @@ export default function GoalCalculator({ onSaveGoal }) {
     try {
       const proteinTarget = Math.round(parseFloat(weight) * 1.6);
       
-      // 1. Save all data to Supabase Database
+      // Save all data to Supabase Database
       await saveUserProfile({
         gender: gender,
         age: parseInt(age),
@@ -58,11 +77,11 @@ export default function GoalCalculator({ onSaveGoal }) {
         goal_protein: proteinTarget
       });
 
-      // 2. Save to LocalStorage for instant UI updates (Dashboard & Analytics)
+      // Save to LocalStorage for instant UI updates
       localStorage.setItem('userCalorieGoal', result);
       localStorage.setItem('userProteinGoal', proteinTarget);
       
-      // 3. Update the Dashboard State
+      // Update the Dashboard State
       if (onSaveGoal) {
         onSaveGoal(result);
       }
@@ -129,7 +148,6 @@ export default function GoalCalculator({ onSaveGoal }) {
                     >
                       Recalculate
                     </button>
-                    {/* UPDATED: Button shows "Saving..." state */}
                     <button 
                       onClick={handleSave}
                       disabled={isSaving}

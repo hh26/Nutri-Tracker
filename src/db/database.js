@@ -399,3 +399,32 @@ export async function saveUserProfile(profileData) {
     throw error;
   }
 }
+
+// Add this to the bottom of src/db/database.js
+
+export async function getUserProfile() {
+  try {
+    // 1. Get the currently logged-in user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) return null;
+
+    // 2. Fetch their specific row from the profiles table
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single(); // .single() ensures we just get one object back, not an array
+
+    if (error) {
+      // PGRST116 means no rows were found (user hasn't set a goal yet), which is fine!
+      if (error.code === 'PGRST116') return null; 
+      throw error;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    return null;
+  }
+}

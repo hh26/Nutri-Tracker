@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Coffee, Sun, Moon, Utensils, ChevronLeft, ChevronRight } from 'lucide-react';
-import { deleteMeal, moveMeal, copyMeal, updateMeal, getDailyLogs } from '../db/database';
+// NEW: Import getUserProfile
+import { deleteMeal, moveMeal, copyMeal, updateMeal, getDailyLogs, getUserProfile } from '../db/database';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
 import LoadingSpinner from './LoadingSpinner';
@@ -16,19 +17,17 @@ export default function Dashboard() {
   const [dailyTotals, setDailyTotals] = useState({ calories: 0, protein: 0, carbs: 0, fats: 0 });
   const [logs, setLogs] = useState([]);
   
-  // 1. Calorie Goal State
+  // 1. Initial Load from LocalStorage (Instant UI)
   const [goalCalories, setGoalCalories] = useState(() => {
     const saved = localStorage.getItem('userCalorieGoal');
     return saved ? parseInt(saved, 10) : 2000; 
   });
 
-  // 2. NEW: Protein Goal State
   const [goalProtein, setGoalProtein] = useState(() => {
     const saved = localStorage.getItem('userProteinGoal');
-    return saved ? parseInt(saved, 10) : 120; // Default to 120g
+    return saved ? parseInt(saved, 10) : 120;
   });
   
-  // Date and Modal State
   const [viewDate, setViewDate] = useState(todayDateStr);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeMealType, setActiveMealType] = useState('');
@@ -37,12 +36,31 @@ export default function Dashboard() {
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 3. UPDATED: When a new goal is applied, update BOTH states in the Dashboard
+  // 2. NEW: Fetch Profile from DB on mount
+  useEffect(() => {
+    const syncProfileData = async () => {
+      const profile = await getUserProfile();
+      
+      if (profile) {
+        // If the DB has a calorie goal, sync it to state and localStorage
+        if (profile.goal_calories) {
+          setGoalCalories(profile.goal_calories);
+          localStorage.setItem('userCalorieGoal', profile.goal_calories);
+        }
+        
+        // If the DB has a protein goal, sync it to state and localStorage
+        if (profile.goal_protein) {
+          setGoalProtein(profile.goal_protein);
+          localStorage.setItem('userProteinGoal', profile.goal_protein);
+        }
+      }
+    };
+    
+    syncProfileData();
+  }, []); // Empty dependency array means this runs exactly once when the Dashboard loads
+
   const handleNewGoal = (calculatedGoal) => {
     setGoalCalories(calculatedGoal);
-    
-    // The GoalCalculator saves the protein goal to localStorage right before calling this function,
-    // so we can just grab it directly from storage to update our UI instantly!
     const updatedProtein = localStorage.getItem('userProteinGoal');
     if (updatedProtein) {
       setGoalProtein(parseInt(updatedProtein, 10));
@@ -70,7 +88,6 @@ export default function Dashboard() {
     refreshData();
   }, [viewDate]);
 
-  // Date Navigation Helpers
   const adjustDate = (days) => {
     const dateObj = new Date(viewDate + 'T12:00:00Z');
     dateObj.setDate(dateObj.getDate() + days);
@@ -79,7 +96,6 @@ export default function Dashboard() {
 
   const isToday = viewDate === todayDateStr;
 
-  // Dynamic Title Logic
   let pageTitle = "Today's Intake";
   if (!isToday) {
     const viewDateObj = new Date(viewDate + 'T12:00:00Z');
@@ -110,9 +126,7 @@ export default function Dashboard() {
       <GoalCalculator onSaveGoal={handleNewGoal} />
       <header className="bg-white px-6 pt-10 pb-6 rounded-b-3xl shadow-sm">
         
-        {/* Title & Date Navigator Row */}
         <div className="flex flex-col items-center justify-center w-full">
-          
           <h1 className="text-2xl font-bold text-slate-800 text-center">
             {pageTitle}
           </h1>
@@ -143,10 +157,8 @@ export default function Dashboard() {
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-          
         </div>
 
-        {/* Prominent Centered Progress Ring */}
         <div className="w-48 h-48 relative flex items-center justify-center mt-8 mb-6 mx-auto">
           <CircularProgressbar 
             value={progressPercentage} 
@@ -171,7 +183,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* 4. UPDATED: Pass the goalProtein down to the Protein MacroCard */}
         <div className="flex justify-between w-full max-w-sm px-2 mt-2 mx-auto">
           <MacroCard label="Carbs" value={dailyTotals.carbs} color="bg-blue-500" />
           <MacroCard label="Protein" value={dailyTotals.protein} goal={goalProtein} color="bg-red-500" />
@@ -215,7 +226,6 @@ export default function Dashboard() {
   );
 }
 
-// 5. UPDATED: MacroCard now accepts an optional 'goal' prop and formats it cleanly
 function MacroCard({ label, value, goal, color }) {
   return (
     <div className="flex flex-col items-center">
