@@ -2,14 +2,15 @@
 
 The idea for this project actually started with me wanting to track my weekly calories and protein intake for bulking. I tried using existing apps, but they all had payment locks after a few days. So I thought, why not create one myself. So I sat down and created this app using Google Gemini, and built all the features that I wanted with no paywalls.
 
-A full-stack, modern web application designed to help users seamlessly track their daily caloric intake, monitor macronutrients, and analyze weekly dietary trends. Built with a focus on a clean, responsive UI and a secure, serverless backend architecture.
+A full-stack, modern web application that helps users seamlessly track daily caloric intake, monitor macronutrient intake, and analyze weekly dietary trends. Built with a focus on a clean, responsive UI and a secure, serverless backend architecture.
 
 ✨ Features
+
 Daily Intake Dashboard: Log meals across Breakfast, Lunch, Snacks, and Dinner. View a prominent daily calorie progress ring and macro summaries (Protein, Carbs, Fats).
 
 Smart Goal Calculator: Built-in BMR and TDEE calculator using the Mifflin-St Jeor Equation. Automatically generates personalized daily calorie and protein goals based on user metrics (age, weight, height, gender, activity level).
 
-Weekly Analytics & Trends: Interactive charts visualize weekly calorie and macro trends. Includes visual goal-tracking lines and dynamic bar coloring. Also includes a toggle to only include the active days, so the cheat days that the users ignore to track won't show up on the weekly average.
+Weekly Analytics & Trends: Interactive charts visualize weekly calorie and macro trends. Includes visual goal-tracking lines and dynamic bar coloring. Also includes a toggle to show only active days, so cheat days users ignore when tracking won't show up in the weekly average.
 
 Edamam Food Database Integration: Search for millions of foods instantly to get accurate nutritional data.
 
@@ -22,6 +23,7 @@ Meal Management: Easily move items between meals, copy and paste meals, update q
 Custom Foods and Custom Combos: Users can add meals that are not in the database and track them. They can also create combos of meals which they often have together and add them for tracking easily every day.
 
 🛠️ Tech Stack
+
 Frontend
 
 React (Vite): Fast, modern UI library and build tool.
