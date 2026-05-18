@@ -373,3 +373,29 @@ export async function getRecentLogs(limitCount = 50) {
     return [];
   }
 }
+
+export async function saveUserProfile(profileData) {
+  try {
+    // 1. Get the currently logged-in user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) throw new Error("No user logged in");
+
+    // 2. Upsert (Update or Insert) the data into the profiles table
+    const { data, error } = await supabase
+      .from('profiles')
+      .upsert({
+        id: user.id, // Links this row to the authenticated user
+        ...profileData,
+        updated_at: new Date()
+      })
+      .select();
+
+    if (error) throw error;
+    return data;
+    
+  } catch (error) {
+    console.error("Error saving user profile:", error);
+    throw error;
+  }
+}
