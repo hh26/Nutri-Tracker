@@ -12,6 +12,7 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
   const [selectedFood, setSelectedFood] = useState(null);
   const [inputAmount, setInputAmount] = useState(1);
   const [inputMetric, setInputMetric] = useState('unit');
+  const [selectedMeasure, setSelectedMeasure] = useState({ label: 'unit', weight: 1 });
   
   const [customCombos, setCustomCombos] = useState([]);
   const [userFoods, setUserFoods] = useState([]);
@@ -25,8 +26,9 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
 
   useEffect(() => {
     if (isOpen) {
-      setIsLoading(true); 
+      setIsLoading(true); // Start loading when opened
       
+      // Fetch combos, custom foods, AND recent logs from Supabase all at the same time
       Promise.all([
         getCombos(), 
         getCustomFoods(), 
@@ -35,25 +37,20 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
         setCustomCombos(combos);
         setUserFoods(customFoodsData);
         
-        const allLocalItems = [...combos, ...customFoodsData];
-        const uniqueFoodNames = [...new Set(recentLogs.map(log => log.foodName))];
+        // DIRECT ASSIGNMENT: The database function already did all the hard work!
+        setRecentFoods(recentLogs);
         
-        const recents = uniqueFoodNames
-          .map(name => allLocalItems.find(item => item.name === name) || recentLogs.find(log => log.foodName === name)?.baseFood)
-          .filter(Boolean)
-          .slice(0, 6);
-          
-        setRecentFoods(recents);
-        setIsLoading(false); 
+        setIsLoading(false); // Stop loading when all data arrives
       });
     } else {
+      // Reset when closed
       setSearchQuery('');
       setSelectedFood(null);
       setInputAmount(1);
       setInputMetric('unit');
       setApiFoods([]);
     }
-  }, [isOpen, mealType]); 
+  }, [isOpen, mealType]);
 
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -88,6 +85,18 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
 
         const mappedData = (data.hints || []).map(item => {
           const food = item.food;
+          
+          // NEW: Extract available measures (Piece, Cup, Serving, etc.)
+          // We filter out any measures that don't include a weight property
+          const validMeasures = (item.measures || [])
+            .filter(m => m.weight)
+            .map(m => ({ label: m.label, weight: m.weight }));
+
+          // Ensure "Gram" is always an option as a fallback
+          if (!validMeasures.find(m => m.label.toLowerCase() === 'gram')) {
+             validMeasures.push({ label: 'Gram', weight: 1 });
+          }
+
           return {
             id: food.foodId,
             name: food.label,
@@ -97,7 +106,8 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
             fats: food.nutrients.FAT || 0,
             baseUnit: '100g',
             baseWeight: 100, 
-            isApi: true
+            isApi: true,
+            availableMeasures: validMeasures // <-- Save it to the food object!
           };
         });
 
@@ -125,25 +135,49 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
 
   const handleSelectFood = (food) => {
     setSelectedFood(food);
-    setInputMetric(food.isApi ? 'grams' : 'unit');
-    setInputAmount(food.isApi ? 100 : 1);
+    
+    // 1. SMART PRE-FILL: Check if it's a recent food with a saved history
+    if (food.pastAmount && food.pastMetric) {
+      setInputAmount(food.pastAmount);
+      
+      if (food.isApi) {
+        const measures = food.availableMeasures || [];
+        const pastMeasure = measures.find(m => m.label === food.pastMetric);
+        // Restore their exact measure (e.g., "Piece" or "Serving")
+        setSelectedMeasure(pastMeasure || { label: food.pastMetric, weight: 1 });
+      } else {
+        // Restore local food units
+        setSelectedMeasure({ 
+          label: food.pastMetric, 
+          weight: food.pastMetric === 'Grams' ? 1 : (food.baseWeight || 1) 
+        });
+      }
+    } 
+    // 2. FRESH SEARCH DEFAULTS (When searching for a new food)
+    else if (food.isApi) {
+      setInputAmount(100);
+      const measures = food.availableMeasures || [];
+      const gramMeasure = measures.find(m => m.label.toLowerCase() === 'gram');
+      setSelectedMeasure(gramMeasure || { label: 'Gram', weight: 1 });
+    } else {
+      setInputAmount(1);
+      setSelectedMeasure({ label: 'Unit', weight: food.baseWeight || 1 });
+    }
   };
 
-  const handleSaveMeal = async () => {
+  const handleSaveMeal = async (calculatedRatio) => {
     if (!selectedFood) return;
-
-    const ratio = inputMetric === 'grams' ? (inputAmount / selectedFood.baseWeight) : inputAmount;
 
     await logMeal({
       date: viewDate,
       mealType: mealType,
       foodName: selectedFood.name,
-      calories: selectedFood.calories * ratio,
-      protein: selectedFood.protein * ratio,
-      carbs: selectedFood.carbs * ratio,
-      fats: selectedFood.fats * ratio,
+      calories: selectedFood.calories * calculatedRatio,
+      protein: selectedFood.protein * calculatedRatio,
+      carbs: selectedFood.carbs * calculatedRatio,
+      fats: selectedFood.fats * calculatedRatio,
       inputAmount: inputAmount,
-      inputMetric: inputMetric,
+      inputMetric: selectedMeasure.label, // Save "Piece", "Serving", etc.
       baseFood: selectedFood 
     });
 
@@ -242,7 +276,8 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
         <div className="flex-1 p-6 flex flex-col">
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-200">
             <h2 className="text-2xl font-bold text-stone-800 mb-1">{selectedFood.name}</h2>
-            <p className="text-stone-500 mb-6 font-medium">Base Data: {selectedFood.baseWeight}g</p>
+            {/* Show how much 1 unit of the current selection weighs */}
+            <p className="text-stone-500 mb-6 font-medium">1 {selectedMeasure.label} = {Math.round(selectedMeasure.weight)}g</p>
 
             <div className="flex gap-4">
               <div className="flex-1">
@@ -256,33 +291,64 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
                 />
               </div>
               <div className="flex-1">
-                <label className="text-xs text-stone-500 font-bold uppercase tracking-wider mb-2 block">Metric</label>
+                <label className="text-xs text-stone-500 font-bold uppercase tracking-wider mb-2 block">Measure</label>
                 <select 
-                  className="w-full bg-stone-50 border border-stone-200 text-lg py-3.5 px-4 rounded-xl outline-none focus:border-amber-500 appearance-none font-bold text-stone-700 transition-all"
-                  value={inputMetric}
-                  onChange={(e) => setInputMetric(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-200 text-lg py-3.5 px-4 rounded-xl outline-none focus:border-amber-500 appearance-none font-bold text-stone-700 transition-all cursor-pointer"
+                  value={selectedMeasure.label}
+                  onChange={(e) => {
+                    if (selectedFood.isApi && selectedFood.availableMeasures) {
+                      const newMeasure = selectedFood.availableMeasures.find(m => m.label === e.target.value);
+                      setSelectedMeasure(newMeasure || { label: 'Gram', weight: 1 });
+                    } else {
+                      setSelectedMeasure({ 
+                        label: e.target.value, 
+                        weight: e.target.value === 'Grams' ? 1 : (selectedFood.baseWeight || 1) 
+                      });
+                    }
+                  }}
                 >
-                  {!selectedFood.isApi && <option value="unit">Units</option>}
-                  <option value="grams">Grams</option>
+                  {/* Check if availableMeasures exists before mapping over it */}
+                  {selectedFood.isApi && selectedFood.availableMeasures && selectedFood.availableMeasures.length > 0 ? (
+                    selectedFood.availableMeasures.map((measure, idx) => (
+                      <option key={idx} value={measure.label}>{measure.label}</option>
+                    ))
+                  ) : (
+                    <>
+                      {/* Fallback layout for local foods or legacy recent items */}
+                      <option value="Grams">Grams</option>
+                      {!selectedFood.isApi && <option value="Unit">Units</option>}
+                    </>
+                  )}
                 </select>
               </div>
             </div>
 
-            <div className="bg-stone-50 p-4 rounded-2xl mt-6 flex justify-between items-center border border-stone-100">
-              <span className="text-amber-600 font-bold text-xl">
-                {Math.round(selectedFood.calories * (inputMetric === 'grams' ? inputAmount / selectedFood.baseWeight : inputAmount))} kcal
-              </span>
-              <span className="text-stone-500 font-medium text-sm">
-                P: {Math.round(selectedFood.protein * (inputMetric === 'grams' ? inputAmount / selectedFood.baseWeight : inputAmount) * 10)/10}g • 
-                C: {Math.round(selectedFood.carbs * (inputMetric === 'grams' ? inputAmount / selectedFood.baseWeight : inputAmount) * 10)/10}g • 
-                F: {Math.round(selectedFood.fats * (inputMetric === 'grams' ? inputAmount / selectedFood.baseWeight : inputAmount) * 10)/10}g
-              </span>
-            </div>
+            {/* The Math Engine! */}
+            {(() => {
+              // Ratio = (How many they ate * The weight of that measure) / 100g base
+              const ratio = (inputAmount * selectedMeasure.weight) / selectedFood.baseWeight;
+              
+              return (
+                <div className="bg-stone-50 p-4 rounded-2xl mt-6 flex justify-between items-center border border-stone-100">
+                  <span className="text-amber-600 font-bold text-xl">
+                    {Math.round(selectedFood.calories * ratio)} kcal
+                  </span>
+                  <span className="text-stone-500 font-medium text-sm">
+                    P: {Math.round((selectedFood.protein * ratio) * 10)/10}g • 
+                    C: {Math.round((selectedFood.carbs * ratio) * 10)/10}g • 
+                    F: {Math.round((selectedFood.fats * ratio) * 10)/10}g
+                  </span>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="mt-auto pb-safe">
             <button 
-              onClick={handleSaveMeal} 
+              onClick={() => {
+                const ratio = (inputAmount * selectedMeasure.weight) / selectedFood.baseWeight;
+                handleSaveMeal(ratio);
+              }} 
               className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg py-4 rounded-2xl shadow-md active:scale-95 transition-all"
             >
               Add to Diary

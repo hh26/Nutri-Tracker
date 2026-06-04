@@ -496,8 +496,12 @@ export async function getRecentFoodsByMeal(mealType) {
       if (!seenNames.has(normalizedName)) {
         seenNames.add(normalizedName);
         
-        // Add a flag so the frontend knows this is a "recent" item, not an API search result
-        uniqueFoods.push({ ...item, isRecent: true }); 
+        uniqueFoods.push({ 
+          ...(item.baseFood || { name: item.foodName, calories: item.calories, protein: item.protein, carbs: item.carbs, fats: item.fats }), 
+          pastAmount: item.inputAmount,
+          pastMetric: item.inputMetric,
+          isRecent: true 
+        });
         
         // Stop once we have 10 unique items
         if (uniqueFoods.length === 10) break; 
