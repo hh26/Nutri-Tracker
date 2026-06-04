@@ -428,3 +428,86 @@ export async function getUserProfile() {
     return null;
   }
 }
+
+// Replace your existing copySelectedMeals in src/db/database.js with this:
+
+export async function copySelectedMeals(selectedLogs, targetDate) {
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) throw new Error("Not authenticated");
+
+    // 1. Prepare the new logs for the target day
+    const newLogs = selectedLogs.map(log => {
+      // Strip out IDs and timestamps so Supabase can cleanly generate new ones
+      const { id, created_at, updated_at, ...rest } = log; 
+      
+      return {
+        ...rest,
+        date: targetDate,
+      };
+    });
+
+    // 2. Insert into the database
+    const { data, error: insertError } = await supabase
+      .from('logs')
+      .insert(newLogs)
+      .select();
+
+    if (insertError) {
+      // This will print the EXACT reason it failed in your browser console!
+      console.error("Supabase Insert Error:", insertError.message); 
+      return false;
+    }
+    
+    return true;
+
+  } catch (error) {
+    console.error("Error copying selected meals:", error);
+    return false;
+  }
+}
+
+// Add to the bottom of src/db/database.js
+
+export async function getRecentFoodsByMeal(mealType) {
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return [];
+
+    // 1. Fetch the last 50 items logged for this specific meal
+    const { data, error } = await supabase
+      .from('logs') // 🚨 Change if your table is named 'logs' or something else
+      .select('*') // Get just the food data
+      .eq('user_id', user.id)
+      .eq('mealType', mealType)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+
+    // 2. Remove duplicates (so if you ate eggs 4 days in a row, it only shows once)
+    const uniqueFoods = [];
+    const seenNames = new Set();
+    
+    for (const item of data) {
+      // Normalize the name (lowercase) to catch exact matches
+      const normalizedName = item.foodName.toLowerCase().trim();
+      
+      if (!seenNames.has(normalizedName)) {
+        seenNames.add(normalizedName);
+        
+        // Add a flag so the frontend knows this is a "recent" item, not an API search result
+        uniqueFoods.push({ ...item, isRecent: true }); 
+        
+        // Stop once we have 10 unique items
+        if (uniqueFoods.length === 10) break; 
+      }
+    }
+    
+    return uniqueFoods;
+
+  } catch (error) {
+    console.error("Error fetching recent foods:", error);
+    return [];
+  }
+}

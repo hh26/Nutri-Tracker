@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, Clock, Loader2 } from 'lucide-react';
-import { getCombos, logMeal, getCustomFoods, getRecentLogs } from '../db/database';
+import { getCombos, logMeal, getCustomFoods, getRecentLogs, getRecentFoodsByMeal } from '../db/database';
 import LoadingSpinner from './LoadingSpinner';
-import { supabase } from '../db/supabase'; // Adjust path as needed
+import { supabase } from '../db/supabase'; 
 
-// Add your Edamam keys here!
 const EDAMAM_APP_ID = import.meta.env.VITE_EDAMAM_APP_ID; 
 const EDAMAM_APP_KEY = import.meta.env.VITE_EDAMAM_APP_KEY;
 
@@ -17,6 +16,7 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
   const [customCombos, setCustomCombos] = useState([]);
   const [userFoods, setUserFoods] = useState([]);
   const [recentFoods, setRecentFoods] = useState([]);
+  const [isLoadingRecents, setIsLoadingRecents] = useState(false);
 
   const [apiFoods, setApiFoods] = useState([]);
   const [isSearchingAPI, setIsSearchingAPI] = useState(false);
@@ -25,17 +25,16 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
 
   useEffect(() => {
     if (isOpen) {
-      setIsLoading(true); // Start loading when opened
-      // Fetch combos, custom foods, AND recent logs from Supabase all at the same time
+      setIsLoading(true); 
+      
       Promise.all([
         getCombos(), 
         getCustomFoods(), 
-        getRecentLogs(50)
+        getRecentFoodsByMeal(mealType)
       ]).then(([combos, customFoodsData, recentLogs]) => {
         setCustomCombos(combos);
         setUserFoods(customFoodsData);
         
-        // Calculate Recents from the Cloud Database History
         const allLocalItems = [...combos, ...customFoodsData];
         const uniqueFoodNames = [...new Set(recentLogs.map(log => log.foodName))];
         
@@ -45,19 +44,17 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
           .slice(0, 6);
           
         setRecentFoods(recents);
-        setIsLoading(false); // Stop loading when all data arrives
+        setIsLoading(false); 
       });
     } else {
-      // Reset when closed
       setSearchQuery('');
       setSelectedFood(null);
       setInputAmount(1);
       setInputMetric('unit');
       setApiFoods([]);
     }
-  }, [isOpen]);
+  }, [isOpen, mealType]); 
 
-  // Edamam API Search Logic
   useEffect(() => {
     if (!searchQuery.trim()) {
       setApiFoods([]);
@@ -69,20 +66,16 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
 
     const delayDebounceFn = setTimeout(async () => {
       try {
-
-        // 1. Get the current user's session token securely
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!session) {
           throw new Error("You must be logged in to search.");
         }
         
-        // 2. Hit your Vercel API proxy
         const response = await fetch(`/api/food-search?query=${encodeURIComponent(searchQuery)}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            // Pass the token so the backend can verify it!
             'Authorization': `Bearer ${session.access_token}`
           }
         });
@@ -93,8 +86,6 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
 
         const data = await response.json();
 
-        // Map Edamam data to our app's standard format
-        // Edamam returns data inside a 'hints' array
         const mappedData = (data.hints || []).map(item => {
           const food = item.food;
           return {
@@ -105,12 +96,11 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
             carbs: food.nutrients.CHOCDF || 0,
             fats: food.nutrients.FAT || 0,
             baseUnit: '100g',
-            baseWeight: 100, // Edamam's base nutrients are per 100g
+            baseWeight: 100, 
             isApi: true
           };
         });
 
-        // Remove duplicate API results (Edamam sometimes returns different brands of the same raw food)
         const uniqueApiFoods = Array.from(new Map(mappedData.map(item => [item.name.toLowerCase(), item])).values()).slice(0, 15);
 
         setApiFoods(uniqueApiFoods);
@@ -189,7 +179,6 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
             )}
           </div>
 
-          {/* Conditional Rendering Block Starts Here */}
           {isLoading ? (
             <div className="mt-10">
                <LoadingSpinner message="Waking up Database..." />
@@ -199,7 +188,8 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
               <h3 className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3 px-2">Search Results</h3>
               {combinedResults.map((food, idx) => (
                 <div 
-                  key={food.id || idx} 
+                  /* FIX 1: Appended the loop index (-${idx}) to guarantee a unique key even if Edamam returns duplicate IDs */
+                  key={`${food.id}-${idx}`} 
                   onClick={() => handleSelectFood(food)}
                   className="flex justify-between items-center p-4 bg-white hover:bg-stone-50 active:bg-stone-200 rounded-2xl cursor-pointer transition-all border border-stone-100 shadow-sm"
                 >
@@ -230,7 +220,8 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
               {recentFoods.length > 0 ? (
                 recentFoods.map((food, idx) => (
                   <div 
-                    key={`recent-${food.id || idx}`} 
+                    /* FIX 2: Fixed the Recent Foods key identically to prevent the same issue here */
+                    key={`recent-${food.id}-${idx}`} 
                     onClick={() => handleSelectFood(food)}
                     className="flex justify-between items-center p-4 bg-white hover:bg-stone-50 active:bg-stone-200 rounded-2xl cursor-pointer transition-all border border-stone-100 shadow-sm"
                   >

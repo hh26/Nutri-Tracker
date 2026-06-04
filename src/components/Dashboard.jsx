@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Coffee, Sun, Moon, Utensils, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Coffee, Sun, Moon, Utensils, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 // NEW: Import getUserProfile
 import { deleteMeal, moveMeal, copyMeal, updateMeal, getDailyLogs, getUserProfile } from '../db/database';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
@@ -10,6 +10,7 @@ import GoalCalculator from './GoalCalculator';
 import MealSection from './MealSection';
 import SearchModal from './SearchModal';
 import ItemActionModal from './ItemActionModal';
+import CopyPastMealModal from './CopyPastMealModal';
 
 const todayDateStr = new Date().toISOString().split('T')[0];
 
@@ -35,6 +36,7 @@ export default function Dashboard() {
   const [selectedLog, setSelectedLog] = useState(null);
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCopyPastModalOpen, setIsCopyPastModalOpen] = useState(false);
 
   // 2. NEW: Fetch Profile from DB on mount
   useEffect(() => {
@@ -196,6 +198,15 @@ export default function Dashboard() {
           <LoadingSpinner message="Fetching Diary..." />
         ) : (
           <>
+            <div className="flex justify-end mb-2">
+              <button 
+                onClick={() => setIsCopyPastModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs font-bold text-blue-500 bg-blue-50 py-1.5 px-3 rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copy from Past
+              </button>
+            </div>
             <MealSection title="Breakfast" icon={<Coffee className="w-5 h-5 text-amber-600" />} logs={logs.filter(log => log.mealType === 'Breakfast')} onOpenSearch={() => handleOpenSearch("Breakfast")} onLogClick={handleLogClick} />
             <MealSection title="Lunch" icon={<Sun className="w-5 h-5 text-orange-500" />} logs={logs.filter(log => log.mealType === 'Lunch')} onOpenSearch={() => handleOpenSearch("Lunch")} onLogClick={handleLogClick} />
             <MealSection title="Snacks" icon={<Utensils className="w-5 h-5 text-purple-500" />} logs={logs.filter(log => log.mealType === 'Snacks')} onOpenSearch={() => handleOpenSearch("Snacks")} onLogClick={handleLogClick} />
@@ -221,6 +232,13 @@ export default function Dashboard() {
         onCopy={async (log, target) => { await copyMeal(log, target); refreshData(); }}
         onDelete={async (id) => { await deleteMeal(id); refreshData(); }}
         onUpdate={async (id, data) => { await updateMeal(id, data); refreshData(); }}
+      />
+
+      <CopyPastMealModal 
+        isOpen={isCopyPastModalOpen}
+        onClose={() => setIsCopyPastModalOpen(false)}
+        targetDate={viewDate}
+        onSuccess={refreshData}
       />
     </div>
   );
