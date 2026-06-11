@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     if (!userId) return res.status(400).json({ error: 'No user ID provided' });
 
     // 1. Let Gemini figure out what the user said
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const prompt = `
       Analyze this user voice input for a nutrition tracker: "${text}"
       
