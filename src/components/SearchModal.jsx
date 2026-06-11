@@ -300,23 +300,22 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
                       const newMeasure = selectedFood.availableMeasures.find(m => m.label === e.target.value);
                       setSelectedMeasure(newMeasure || { label: 'Gram', weight: 1 });
                     } else {
-                      setSelectedMeasure({ 
-                        label: e.target.value, 
-                        weight: e.target.value === 'Grams' ? 1 : (selectedFood.baseWeight || 1) 
-                      });
+                      // Allow local foods to switch between Unit and Grams
+                      setSelectedMeasure({ label: e.target.value, weight: 1 });
                     }
                   }}
                 >
-                  {/* Check if availableMeasures exists before mapping over it */}
                   {selectedFood.isApi && selectedFood.availableMeasures && selectedFood.availableMeasures.length > 0 ? (
                     selectedFood.availableMeasures.map((measure, idx) => (
                       <option key={idx} value={measure.label}>{measure.label}</option>
                     ))
+                  ) : selectedFood.isApi ? (
+                    <option value="Gram">Grams</option>
                   ) : (
                     <>
-                      {/* Fallback layout for local foods or legacy recent items */}
+                      {/* Show both options for custom foods! */}
+                      <option value="Unit">Serving / Unit</option>
                       <option value="Grams">Grams</option>
-                      {!selectedFood.isApi && <option value="Unit">Units</option>}
                     </>
                   )}
                 </select>
@@ -324,9 +323,18 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
             </div>
 
             {/* The Math Engine! */}
+            {/* The Math Engine! */}
             {(() => {
-              // Ratio = (How many they ate * The weight of that measure) / 100g base
-              const ratio = (inputAmount * selectedMeasure.weight) / selectedFood.baseWeight;
+              // 1. Default ratio is just the input amount (for "Units")
+              let ratio = inputAmount;
+              
+              if (selectedFood.isApi) {
+                // 2. API foods use the complex Edamam weight math
+                ratio = (inputAmount * selectedMeasure.weight) / (selectedFood.baseWeight || 100);
+              } else if (selectedMeasure.label === 'Grams') {
+                // 3. Local foods in Grams: divide by their custom baseWeight (fallback to 100g)
+                ratio = inputAmount / (selectedFood.baseWeight || 100);
+              }
               
               return (
                 <div className="bg-stone-50 p-4 rounded-2xl mt-6 flex justify-between items-center border border-stone-100">
@@ -346,7 +354,14 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
           <div className="mt-auto pb-safe">
             <button 
               onClick={() => {
-                const ratio = (inputAmount * selectedMeasure.weight) / selectedFood.baseWeight;
+                let ratio = inputAmount;
+              
+                if (selectedFood.isApi) {
+                  ratio = (inputAmount * selectedMeasure.weight) / (selectedFood.baseWeight || 100);
+                } else if (selectedMeasure.label === 'Grams') {
+                  ratio = inputAmount / (selectedFood.baseWeight || 100);
+                }
+                  
                 handleSaveMeal(ratio);
               }} 
               className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg py-4 rounded-2xl shadow-md active:scale-95 transition-all"
