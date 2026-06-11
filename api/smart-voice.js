@@ -88,7 +88,7 @@ export default async function handler(req, res) {
 
     // 5. Log directly to your Supabase meals table
     const { error: supabaseError } = await supabase
-      .from('meals')
+      .from('logs')
       .insert({
         user_id: userId,
         date: new Date().toISOString().split('T')[0],
