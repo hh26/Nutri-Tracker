@@ -86,29 +86,66 @@ export default async function handler(req, res) {
       fats: Math.round(((matchedFood.nutrients.FAT || 0) * ratio) * 10) / 10,
     };
 
-    // 5. Log directly to your Supabase meals table
-    const { error: supabaseError } = await supabase
-      .from('logs')
-      .insert({
-        user_id: userId,
-        date: new Date().toISOString().split('T')[0],
-        mealType: data.meal,
-        foodName: matchedFood.label, // Saves the "Official" name from Edamam (e.g., "Fried Egg")
-        calories: calculatedNutrients.calories,
-        protein: calculatedNutrients.protein,
-        carbs: calculatedNutrients.carbs,
-        fats: calculatedNutrients.fats,
-        inputAmount: data.quantity,
-        inputMetric: finalMeasure
+    // 5. Check if this food is ALREADY logged for this meal today
+    const today = new Date().toISOString().split('T')[0];
+    
+    const { data: existingMeal, error: searchError } = await supabase
+      .from('meals')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .eq('mealType', data.meal)
+      .ilike('foodName', matchedFood.label) // Matches the exact Edamam name
+      .maybeSingle(); // Returns the row if it exists, or null if it doesn't
+
+    if (existingMeal) {
+      // 🟢 SCENARIO A: Food already exists! We add to the existing row.
+      
+      const { error: updateError } = await supabase
+        .from('meals')
+        .update({
+          // We intentionally DO NOT update the metric, forcing it to stay what it was originally
+          inputAmount: existingMeal.inputAmount + data.quantity, 
+          calories: existingMeal.calories + calculatedNutrients.calories,
+          protein: existingMeal.protein + calculatedNutrients.protein,
+          carbs: existingMeal.carbs + calculatedNutrients.carbs,
+          fats: existingMeal.fats + calculatedNutrients.fats
+        })
+        .eq('id', existingMeal.id);
+
+      if (updateError) throw updateError;
+
+      return res.status(200).json({ 
+        status: 'success', 
+        message: `Added another ${data.quantity} to your ${matchedFood.label} for ${data.meal}.` 
       });
 
-    if (supabaseError) throw supabaseError;
+    } else {
+      // 🔵 SCENARIO B: Brand new food for today. Insert it normally.
+      
+      const { error: insertError } = await supabase
+        .from('meals')
+        .insert({
+          user_id: userId,
+          date: today,
+          mealType: data.meal,
+          foodName: matchedFood.label, 
+          baseFood: matchedFood, // <-- SAVES THE ENTIRE EDAMAM JSON OBJECT
+          calories: calculatedNutrients.calories,
+          protein: calculatedNutrients.protein,
+          carbs: calculatedNutrients.carbs,
+          fats: calculatedNutrients.fats,
+          inputAmount: data.quantity,
+          inputMetric: finalMeasure 
+        });
 
-    // 6. Respond back to Siri with success
-    return res.status(200).json({ 
-      status: 'success', 
-      message: `Logged ${data.quantity} ${finalMeasure === 'unit' ? '' : finalMeasure} of ${matchedFood.label} to ${data.meal}.` 
-    });
+      if (insertError) throw insertError;
+
+      return res.status(200).json({ 
+        status: 'success', 
+        message: `Logged ${data.quantity} ${finalMeasure === 'unit' ? '' : finalMeasure} of ${matchedFood.label} to ${data.meal}.` 
+      });
+    }
 
   } catch (error) {
     console.error("Smart Voice Integration Error:", error);
