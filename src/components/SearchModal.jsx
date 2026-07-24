@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Search, Clock, Loader2 } from 'lucide-react';
 import { getCombos, logMeal, getCustomFoods, getRecentLogs, getRecentFoodsByMeal } from '../db/database';
 import LoadingSpinner from './LoadingSpinner';
@@ -22,7 +22,17 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
   const [apiFoods, setApiFoods] = useState([]);
   const [isSearchingAPI, setIsSearchingAPI] = useState(false);
 
+  const [isSavingMeal, setIsSavingMeal] = useState(false);
   const [isLoading, setIsLoading] = useState(false); 
+
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -182,23 +192,34 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
   };
 
   const handleSaveMeal = async (calculatedRatio) => {
-    if (!selectedFood) return;
+    if (!selectedFood || isSavingMeal) return;
 
-    await logMeal({
-      date: viewDate,
-      mealType: mealType,
-      foodName: selectedFood.name,
-      calories: selectedFood.calories * calculatedRatio,
-      protein: selectedFood.protein * calculatedRatio,
-      carbs: selectedFood.carbs * calculatedRatio,
-      fats: selectedFood.fats * calculatedRatio,
-      inputAmount: inputAmount,
-      inputMetric: selectedMeasure.label, // Save "Piece", "Serving", etc.
-      baseFood: selectedFood 
-    });
+    setIsSavingMeal(true);
+    try {
+      await logMeal({
+        date: viewDate,
+        mealType: mealType,
+        foodName: selectedFood.name,
+        calories: selectedFood.calories * calculatedRatio,
+        protein: selectedFood.protein * calculatedRatio,
+        carbs: selectedFood.carbs * calculatedRatio,
+        fats: selectedFood.fats * calculatedRatio,
+        inputAmount: inputAmount,
+        inputMetric: selectedMeasure.label, // Save "Piece", "Serving", etc.
+        baseFood: selectedFood 
+      });
 
-    onMealLogged();
-    onClose();
+      if (mounted.current) {
+        onMealLogged();
+        onClose();
+      }
+    } catch (error) {
+      console.error("Failed to save meal:", error);
+    } finally {
+      if (mounted.current) {
+        setIsSavingMeal(false);
+      }
+    }
   };
 
   return (
@@ -380,13 +401,22 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
                   
                 handleSaveMeal(ratio);
               }} 
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg py-4 rounded-2xl shadow-md active:scale-95 transition-all"
+              disabled={isSavingMeal}
+              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg py-4 rounded-2xl shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
             >
-              Add to Diary
+              {isSavingMeal ? (
+                <>
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                'Add to Diary'
+              )}
             </button>
             <button 
               onClick={() => setSelectedFood(null)} 
-              className="w-full mt-3 text-stone-500 font-bold py-4 rounded-2xl active:bg-stone-200 transition-all"
+              disabled={isSavingMeal}
+              className="w-full mt-3 text-stone-500 font-bold py-4 rounded-2xl active:bg-stone-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Back to Search
             </button>

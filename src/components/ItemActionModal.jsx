@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, ArrowRightLeft, Copy, Trash2, Edit2, Check, Plus } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, ArrowRightLeft, Copy, Trash2, Edit2, Check, Plus, Loader2 } from 'lucide-react';
 
 // --- Universal Normalizer for Metrics ---
 // Returns true if the string is any variation of gram (Gram, grams, g)
@@ -18,7 +18,16 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
   const [editAmount, setEditAmount] = useState(1);
   const [addAmount, setAddAmount] = useState('');
   const [editMetric, setEditMetric] = useState('unit');
+  const [isSaving, setIsSaving] = useState(false);
+  const mounted = useRef(false);
 
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  
   // Reset states when the modal opens with a new log
   useEffect(() => {
     if (log) {
@@ -32,6 +41,7 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
       setShowMoveOptions(false);
       setShowCopyOptions(false);
       setShowEditMode(false);
+      setIsSaving(false);
     }
   }, [log, isOpen]);
 
@@ -55,21 +65,49 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
     ? (isGramMetric(editMetric) ? finalAmount / log.baseFood.baseWeight : finalAmount) 
     : 1;
 
-  const handleSaveChanges = () => {
-    if (!log.baseFood) return; 
+  const handleSaveChanges = async () => {
+    if (!log.baseFood || isSaving) return; 
 
     if (editTab === 'add' && (!addAmount || Number(addAmount) <= 0)) return;
 
-    onUpdate(log.id, {
-      inputAmount: finalAmount,
-      // If they leave it as 'unit', we try to save their original custom unit (like "Piece"). Otherwise save the dropdown value.
-      inputMetric: editMetric === 'unit' && !isGramMetric(log.inputMetric) ? (log.inputMetric || 'unit') : editMetric,
-      calories: log.baseFood.calories * ratio,
-      protein: log.baseFood.protein * ratio,
-      carbs: log.baseFood.carbs * ratio,
-      fats: log.baseFood.fats * ratio,
-    });
-    handleClose();
+    setIsSaving(true);
+    try {
+      await onUpdate(log.id, {
+        inputAmount: finalAmount,
+        // If they leave it as 'unit', we try to save their original custom unit (like "Piece"). Otherwise save the dropdown value.
+        inputMetric: editMetric === 'unit' && !isGramMetric(log.inputMetric) ? (log.inputMetric || 'unit') : editMetric,
+        calories: log.baseFood.calories * ratio,
+        protein: log.baseFood.protein * ratio,
+        carbs: log.baseFood.carbs * ratio,
+        fats: log.baseFood.fats * ratio,
+      });
+      if (mounted.current) {
+        handleClose();
+      }
+    } catch (error) {
+      console.error("Failed to save changes:", error);
+    } finally {
+      if (mounted.current) {
+        setIsSaving(false);
+      }
+    }
+  };
+
+  const handleGenericAction = async (actionFn, ...args) => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      await actionFn(...args);
+      if (mounted.current) {
+        handleClose();
+      }
+    } catch (error) {
+      console.error("Action failed:", error);
+    } finally {
+      if (mounted.current) {
+        setIsSaving(false);
+      }
+    }
   };
 
   // Check if the original log was a gram for the UI text displays
@@ -89,7 +127,7 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
                 : `${Math.round(log.calories)} kcal • Currently in ${log.mealType}`}
             </p>
           </div>
-          <button onClick={handleClose} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 active:scale-95 transition-all">
+          <button onClick={handleClose} disabled={isSaving} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-50">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -105,17 +143,15 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
                 {mealOptions.map(meal => (
                   <button 
                     key={meal}
-                    onClick={() => {
-                      showMoveOptions ? onMove(log.id, meal) : onCopy(log, meal);
-                      handleClose();
-                    }}
-                    className="p-4 rounded-2xl bg-slate-50 border border-slate-200 font-semibold text-slate-700 active:bg-green-50 active:border-green-500 transition-all"
+                    onClick={() => handleGenericAction(showMoveOptions ? onMove : onCopy, showMoveOptions ? log.id : log, meal)}
+                    disabled={isSaving}
+                    className="p-4 rounded-2xl bg-slate-50 border border-slate-200 font-semibold text-slate-700 active:bg-green-50 active:border-green-500 transition-all disabled:opacity-50 flex justify-center items-center"
                   >
-                    {meal}
+                    {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : meal}
                   </button>
                 ))}
               </div>
-              <button onClick={() => { setShowMoveOptions(false); setShowCopyOptions(false); }} className="w-full p-4 mt-2 font-semibold text-slate-500 active:bg-slate-50 rounded-xl">
+              <button onClick={() => { setShowMoveOptions(false); setShowCopyOptions(false); }} disabled={isSaving} className="w-full p-4 mt-2 font-semibold text-slate-500 active:bg-slate-50 rounded-xl disabled:opacity-50">
                 Back
               </button>
             </div>
@@ -210,15 +246,24 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
               )}
 
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setShowEditMode(false)} className="px-6 py-4 font-semibold text-slate-500 bg-slate-100 rounded-xl active:scale-95 transition-all">
+                <button onClick={() => setShowEditMode(false)} disabled={isSaving} className="px-6 py-4 font-semibold text-slate-500 bg-slate-100 rounded-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                   Cancel
                 </button>
                 <button 
                   onClick={handleSaveChanges} 
-                  disabled={!log.baseFood || (editTab === 'add' && (!addAmount || Number(addAmount) <= 0))}
-                  className="flex-1 bg-green-500 text-white font-bold py-4 rounded-xl shadow-md active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50"
+                  disabled={!log.baseFood || (editTab === 'add' && (!addAmount || Number(addAmount) <= 0)) || isSaving}
+                  className="flex-1 bg-green-500 text-white font-bold py-4 rounded-xl shadow-md active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Check className="w-5 h-5" /> Save Changes
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-5 h-5" /> Save Changes
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -227,7 +272,7 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
 
             <div className="space-y-1 animate-in fade-in slide-in-from-left-4">
               
-              <button onClick={() => setShowEditMode(true)} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all">
+              <button onClick={() => setShowEditMode(true)} disabled={isSaving} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all disabled:opacity-50">
                 <div className="p-3 bg-green-50 text-green-600 rounded-xl"><Edit2 className="w-5 h-5" /></div>
                 <div className="flex flex-col items-start text-left">
                   <span className="font-semibold text-lg text-slate-700">Edit / Add Quantity</span>
@@ -235,19 +280,23 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
                 </div>
               </button>
 
-              <button onClick={() => setShowMoveOptions(true)} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all">
+              <button onClick={() => setShowMoveOptions(true)} disabled={isSaving} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all disabled:opacity-50">
                 <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><ArrowRightLeft className="w-5 h-5" /></div>
                 <span className="font-semibold text-lg text-slate-700">Move to another meal</span>
               </button>
               
-              <button onClick={() => setShowCopyOptions(true)} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all">
+              <button onClick={() => setShowCopyOptions(true)} disabled={isSaving} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all disabled:opacity-50">
                 <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Copy className="w-5 h-5" /></div>
                 <span className="font-semibold text-lg text-slate-700">Copy to another meal</span>
               </button>
               
-              <button onClick={() => { onDelete(log.id); handleClose(); }} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-red-50 transition-all">
-                <div className="p-3 bg-red-50 text-red-600 rounded-xl"><Trash2 className="w-5 h-5" /></div>
-                <span className="font-semibold text-lg text-red-600">Delete this entry</span>
+              <button onClick={() => handleGenericAction(onDelete, log.id)} disabled={isSaving} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-red-50 transition-all disabled:opacity-50">
+                <div className="p-3 bg-red-50 text-red-600 rounded-xl">
+                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                </div>
+                <div className="flex flex-col items-start text-left">
+                  <span className="font-semibold text-lg text-red-600">{isSaving ? 'Deleting...' : 'Delete this entry'}</span>
+                </div>
               </button>
             </div>
           )}
