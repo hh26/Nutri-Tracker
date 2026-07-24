@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Search, Clock, Loader2 } from 'lucide-react';
 import { getCombos, logMeal, getCustomFoods, getRecentLogs, getRecentFoodsByMeal } from '../db/database';
 import LoadingSpinner from './LoadingSpinner';
@@ -24,6 +24,15 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
 
   const [isSavingMeal, setIsSavingMeal] = useState(false);
   const [isLoading, setIsLoading] = useState(false); 
+
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -200,10 +209,16 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
         baseFood: selectedFood 
       });
 
-      onMealLogged();
-      onClose();
+      if (mounted.current) {
+        onMealLogged();
+        onClose();
+      }
+    } catch (error) {
+      console.error("Failed to save meal:", error);
     } finally {
-      setIsSavingMeal(false);
+      if (mounted.current) {
+        setIsSavingMeal(false);
+      }
     }
   };
 

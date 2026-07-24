@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, ArrowRightLeft, Copy, Trash2, Edit2, Check, Plus, Loader2 } from 'lucide-react';
 
 // --- Universal Normalizer for Metrics ---
@@ -19,7 +19,15 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
   const [addAmount, setAddAmount] = useState('');
   const [editMetric, setEditMetric] = useState('unit');
   const [isSaving, setIsSaving] = useState(false);
+  const mounted = useRef(false);
 
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  
   // Reset states when the modal opens with a new log
   useEffect(() => {
     if (log) {
@@ -73,9 +81,32 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
         carbs: log.baseFood.carbs * ratio,
         fats: log.baseFood.fats * ratio,
       });
-      handleClose();
+      if (mounted.current) {
+        handleClose();
+      }
+    } catch (error) {
+      console.error("Failed to save changes:", error);
     } finally {
-      setIsSaving(false);
+      if (mounted.current) {
+        setIsSaving(false);
+      }
+    }
+  };
+
+  const handleGenericAction = async (actionFn, ...args) => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      await actionFn(...args);
+      if (mounted.current) {
+        handleClose();
+      }
+    } catch (error) {
+      console.error("Action failed:", error);
+    } finally {
+      if (mounted.current) {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -96,7 +127,7 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
                 : `${Math.round(log.calories)} kcal • Currently in ${log.mealType}`}
             </p>
           </div>
-          <button onClick={handleClose} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 active:scale-95 transition-all">
+          <button onClick={handleClose} disabled={isSaving} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-50">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -112,17 +143,15 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
                 {mealOptions.map(meal => (
                   <button 
                     key={meal}
-                    onClick={() => {
-                      showMoveOptions ? onMove(log.id, meal) : onCopy(log, meal);
-                      handleClose();
-                    }}
-                    className="p-4 rounded-2xl bg-slate-50 border border-slate-200 font-semibold text-slate-700 active:bg-green-50 active:border-green-500 transition-all"
+                    onClick={() => handleGenericAction(showMoveOptions ? onMove : onCopy, showMoveOptions ? log.id : log, meal)}
+                    disabled={isSaving}
+                    className="p-4 rounded-2xl bg-slate-50 border border-slate-200 font-semibold text-slate-700 active:bg-green-50 active:border-green-500 transition-all disabled:opacity-50 flex justify-center items-center"
                   >
-                    {meal}
+                    {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : meal}
                   </button>
                 ))}
               </div>
-              <button onClick={() => { setShowMoveOptions(false); setShowCopyOptions(false); }} className="w-full p-4 mt-2 font-semibold text-slate-500 active:bg-slate-50 rounded-xl">
+              <button onClick={() => { setShowMoveOptions(false); setShowCopyOptions(false); }} disabled={isSaving} className="w-full p-4 mt-2 font-semibold text-slate-500 active:bg-slate-50 rounded-xl disabled:opacity-50">
                 Back
               </button>
             </div>
@@ -243,7 +272,7 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
 
             <div className="space-y-1 animate-in fade-in slide-in-from-left-4">
               
-              <button onClick={() => setShowEditMode(true)} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all">
+              <button onClick={() => setShowEditMode(true)} disabled={isSaving} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all disabled:opacity-50">
                 <div className="p-3 bg-green-50 text-green-600 rounded-xl"><Edit2 className="w-5 h-5" /></div>
                 <div className="flex flex-col items-start text-left">
                   <span className="font-semibold text-lg text-slate-700">Edit / Add Quantity</span>
@@ -251,19 +280,23 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
                 </div>
               </button>
 
-              <button onClick={() => setShowMoveOptions(true)} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all">
+              <button onClick={() => setShowMoveOptions(true)} disabled={isSaving} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all disabled:opacity-50">
                 <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><ArrowRightLeft className="w-5 h-5" /></div>
                 <span className="font-semibold text-lg text-slate-700">Move to another meal</span>
               </button>
               
-              <button onClick={() => setShowCopyOptions(true)} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all">
+              <button onClick={() => setShowCopyOptions(true)} disabled={isSaving} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all disabled:opacity-50">
                 <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Copy className="w-5 h-5" /></div>
                 <span className="font-semibold text-lg text-slate-700">Copy to another meal</span>
               </button>
               
-              <button onClick={() => { onDelete(log.id); handleClose(); }} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-red-50 transition-all">
-                <div className="p-3 bg-red-50 text-red-600 rounded-xl"><Trash2 className="w-5 h-5" /></div>
-                <span className="font-semibold text-lg text-red-600">Delete this entry</span>
+              <button onClick={() => handleGenericAction(onDelete, log.id)} disabled={isSaving} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-red-50 transition-all disabled:opacity-50">
+                <div className="p-3 bg-red-50 text-red-600 rounded-xl">
+                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                </div>
+                <div className="flex flex-col items-start text-left">
+                  <span className="font-semibold text-lg text-red-600">{isSaving ? 'Deleting...' : 'Delete this entry'}</span>
+                </div>
               </button>
             </div>
           )}

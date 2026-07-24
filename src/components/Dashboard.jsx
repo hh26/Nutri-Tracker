@@ -70,21 +70,27 @@ export default function Dashboard() {
   };
 
   const refreshData = useCallback(async () => {
-    setIsLoading(true); 
-    const dailyLogs = await getDailyLogs(viewDate); 
-    
-    setLogs(dailyLogs);
-    
-    const totals = dailyLogs.reduce((acc, log) => ({
-      calories: acc.calories + log.calories,
-      protein: acc.protein + log.protein,
-      carbs: acc.carbs + log.carbs,
-      fats: acc.fats + log.fats
-    }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
-    
-    setDailyTotals(totals);
-    setIsLoading(false); 
-  }, [viewDate]);
+    if (isLoading) return; // Prevent concurrent refreshes
+    setIsLoading(true);
+    try {
+      const dailyLogs = await getDailyLogs(viewDate);
+
+      setLogs(dailyLogs);
+
+      const totals = dailyLogs.reduce((acc, log) => ({
+        calories: acc.calories + log.calories,
+        protein: acc.protein + log.protein,
+        carbs: acc.carbs + log.carbs,
+        fats: acc.fats + log.fats
+      }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
+
+      setDailyTotals(totals);
+    } catch (error) {
+      console.error("Failed to refresh data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [viewDate, isLoading]);
 
   useEffect(() => {
     refreshData();
