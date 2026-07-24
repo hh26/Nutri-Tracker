@@ -50,7 +50,6 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
       setInputAmount(1);
       setInputMetric('unit');
       setApiFoods([]);
-      setIsSavingMeal(false);
     }
   }, [isOpen, mealType]);
 
@@ -187,23 +186,25 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
     if (!selectedFood || isSavingMeal) return;
 
     setIsSavingMeal(true);
+    try {
+      await logMeal({
+        date: viewDate,
+        mealType: mealType,
+        foodName: selectedFood.name,
+        calories: selectedFood.calories * calculatedRatio,
+        protein: selectedFood.protein * calculatedRatio,
+        carbs: selectedFood.carbs * calculatedRatio,
+        fats: selectedFood.fats * calculatedRatio,
+        inputAmount: inputAmount,
+        inputMetric: selectedMeasure.label, // Save "Piece", "Serving", etc.
+        baseFood: selectedFood 
+      });
 
-    await logMeal({
-      date: viewDate,
-      mealType: mealType,
-      foodName: selectedFood.name,
-      calories: selectedFood.calories * calculatedRatio,
-      protein: selectedFood.protein * calculatedRatio,
-      carbs: selectedFood.carbs * calculatedRatio,
-      fats: selectedFood.fats * calculatedRatio,
-      inputAmount: inputAmount,
-      inputMetric: selectedMeasure.label, // Save "Piece", "Serving", etc.
-      baseFood: selectedFood 
-    });
-
-    onMealLogged();
-    onClose();
-    // isSavingMeal will be reset by the useEffect on `isOpen`
+      onMealLogged();
+      onClose();
+    } finally {
+      setIsSavingMeal(false);
+    }
   };
 
   return (

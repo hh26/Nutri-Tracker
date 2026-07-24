@@ -63,17 +63,20 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
     if (editTab === 'add' && (!addAmount || Number(addAmount) <= 0)) return;
 
     setIsSaving(true);
-
-    await onUpdate(log.id, {
-      inputAmount: finalAmount,
-      // If they leave it as 'unit', we try to save their original custom unit (like "Piece"). Otherwise save the dropdown value.
-      inputMetric: editMetric === 'unit' && !isGramMetric(log.inputMetric) ? (log.inputMetric || 'unit') : editMetric,
-      calories: log.baseFood.calories * ratio,
-      protein: log.baseFood.protein * ratio,
-      carbs: log.baseFood.carbs * ratio,
-      fats: log.baseFood.fats * ratio,
-    });
-    handleClose();
+    try {
+      await onUpdate(log.id, {
+        inputAmount: finalAmount,
+        // If they leave it as 'unit', we try to save their original custom unit (like "Piece"). Otherwise save the dropdown value.
+        inputMetric: editMetric === 'unit' && !isGramMetric(log.inputMetric) ? (log.inputMetric || 'unit') : editMetric,
+        calories: log.baseFood.calories * ratio,
+        protein: log.baseFood.protein * ratio,
+        carbs: log.baseFood.carbs * ratio,
+        fats: log.baseFood.fats * ratio,
+      });
+      handleClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Check if the original log was a gram for the UI text displays
