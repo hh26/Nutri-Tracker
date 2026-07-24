@@ -136,20 +136,34 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
   const handleSelectFood = (food) => {
     setSelectedFood(food);
     
+    // Helper function to handle casing and singular/plural mismatches (e.g., "Grams" -> "gram")
+    const normalizeMeasure = (str) => {
+      if (!str) return '';
+      const s = str.toLowerCase().trim();
+      if (s === 'g' || s === 'gram' || s === 'grams') return 'gram';
+      return s;
+    };
+
     // 1. SMART PRE-FILL: Check if it's a recent food with a saved history
     if (food.pastAmount && food.pastMetric) {
       setInputAmount(food.pastAmount);
       
       if (food.isApi) {
         const measures = food.availableMeasures || [];
-        const pastMeasure = measures.find(m => m.label === food.pastMetric);
+        
+        // Find the match using the normalized strings
+        const pastMeasure = measures.find(
+          m => normalizeMeasure(m.label) === normalizeMeasure(food.pastMetric)
+        );
+        
         // Restore their exact measure (e.g., "Piece" or "Serving")
         setSelectedMeasure(pastMeasure || { label: food.pastMetric, weight: 1 });
       } else {
-        // Restore local food units
+        // Restore local food units (also updated to check safely for "gram")
+        const isGram = normalizeMeasure(food.pastMetric) === 'gram';
         setSelectedMeasure({ 
           label: food.pastMetric, 
-          weight: food.pastMetric === 'Grams' ? 1 : (food.baseWeight || 1) 
+          weight: isGram ? 1 : (food.baseWeight || 1) 
         });
       }
     } 
@@ -157,7 +171,9 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
     else if (food.isApi) {
       setInputAmount(100);
       const measures = food.availableMeasures || [];
-      const gramMeasure = measures.find(m => m.label.toLowerCase() === 'gram');
+      
+      // Use the same normalizer just in case the API throws a curveball
+      const gramMeasure = measures.find(m => normalizeMeasure(m.label) === 'gram');
       setSelectedMeasure(gramMeasure || { label: 'Gram', weight: 1 });
     } else {
       setInputAmount(1);
