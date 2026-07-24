@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowRightLeft, Copy, Trash2, Edit2, Check, Plus } from 'lucide-react';
+import { X, ArrowRightLeft, Copy, Trash2, Edit2, Check, Plus, Loader2 } from 'lucide-react';
 
 // --- Universal Normalizer for Metrics ---
 // Returns true if the string is any variation of gram (Gram, grams, g)
@@ -18,6 +18,7 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
   const [editAmount, setEditAmount] = useState(1);
   const [addAmount, setAddAmount] = useState('');
   const [editMetric, setEditMetric] = useState('unit');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Reset states when the modal opens with a new log
   useEffect(() => {
@@ -32,6 +33,7 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
       setShowMoveOptions(false);
       setShowCopyOptions(false);
       setShowEditMode(false);
+      setIsSaving(false);
     }
   }, [log, isOpen]);
 
@@ -55,12 +57,14 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
     ? (isGramMetric(editMetric) ? finalAmount / log.baseFood.baseWeight : finalAmount) 
     : 1;
 
-  const handleSaveChanges = () => {
-    if (!log.baseFood) return; 
+  const handleSaveChanges = async () => {
+    if (!log.baseFood || isSaving) return; 
 
     if (editTab === 'add' && (!addAmount || Number(addAmount) <= 0)) return;
 
-    onUpdate(log.id, {
+    setIsSaving(true);
+
+    await onUpdate(log.id, {
       inputAmount: finalAmount,
       // If they leave it as 'unit', we try to save their original custom unit (like "Piece"). Otherwise save the dropdown value.
       inputMetric: editMetric === 'unit' && !isGramMetric(log.inputMetric) ? (log.inputMetric || 'unit') : editMetric,
@@ -210,15 +214,24 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
               )}
 
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setShowEditMode(false)} className="px-6 py-4 font-semibold text-slate-500 bg-slate-100 rounded-xl active:scale-95 transition-all">
+                <button onClick={() => setShowEditMode(false)} disabled={isSaving} className="px-6 py-4 font-semibold text-slate-500 bg-slate-100 rounded-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                   Cancel
                 </button>
                 <button 
                   onClick={handleSaveChanges} 
-                  disabled={!log.baseFood || (editTab === 'add' && (!addAmount || Number(addAmount) <= 0))}
-                  className="flex-1 bg-green-500 text-white font-bold py-4 rounded-xl shadow-md active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50"
+                  disabled={!log.baseFood || (editTab === 'add' && (!addAmount || Number(addAmount) <= 0)) || isSaving}
+                  className="flex-1 bg-green-500 text-white font-bold py-4 rounded-xl shadow-md active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Check className="w-5 h-5" /> Save Changes
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-5 h-5" /> Save Changes
+                    </>
+                  )}
                 </button>
               </div>
             </div>

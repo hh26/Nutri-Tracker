@@ -22,6 +22,7 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
   const [apiFoods, setApiFoods] = useState([]);
   const [isSearchingAPI, setIsSearchingAPI] = useState(false);
 
+  const [isSavingMeal, setIsSavingMeal] = useState(false);
   const [isLoading, setIsLoading] = useState(false); 
 
   useEffect(() => {
@@ -49,6 +50,7 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
       setInputAmount(1);
       setInputMetric('unit');
       setApiFoods([]);
+      setIsSavingMeal(false);
     }
   }, [isOpen, mealType]);
 
@@ -182,7 +184,9 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
   };
 
   const handleSaveMeal = async (calculatedRatio) => {
-    if (!selectedFood) return;
+    if (!selectedFood || isSavingMeal) return;
+
+    setIsSavingMeal(true);
 
     await logMeal({
       date: viewDate,
@@ -199,6 +203,7 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
 
     onMealLogged();
     onClose();
+    // isSavingMeal will be reset by the useEffect on `isOpen`
   };
 
   return (
@@ -380,13 +385,22 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
                   
                 handleSaveMeal(ratio);
               }} 
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg py-4 rounded-2xl shadow-md active:scale-95 transition-all"
+              disabled={isSavingMeal}
+              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg py-4 rounded-2xl shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
             >
-              Add to Diary
+              {isSavingMeal ? (
+                <>
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                'Add to Diary'
+              )}
             </button>
             <button 
-              onClick={() => setSelectedFood(null)} 
-              className="w-full mt-3 text-stone-500 font-bold py-4 rounded-2xl active:bg-stone-200 transition-all"
+              onClick={() => { if (!isSavingMeal) setSelectedFood(null); }}
+              disabled={isSavingMeal}
+              className="w-full mt-3 text-stone-500 font-bold py-4 rounded-2xl active:bg-stone-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Back to Search
             </button>
