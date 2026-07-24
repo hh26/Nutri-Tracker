@@ -6,19 +6,26 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
   const [showCopyOptions, setShowCopyOptions] = useState(false);
   const [showEditMode, setShowEditMode] = useState(false);
   
-  // NEW: State to track which edit tab is active ('total' or 'add')
   const [editTab, setEditTab] = useState('total'); 
-  
-  // States for editing/adding
   const [editAmount, setEditAmount] = useState(1);
   const [addAmount, setAddAmount] = useState('');
   const [editMetric, setEditMetric] = useState('unit');
+
+  // --- NEW: Universal Normalizer for Metrics ---
+  // Returns true if the string is any variation of gram (Gram, grams, GRAM)
+  const isGramMetric = (metricStr) => {
+    if (!metricStr) return false;
+    return metricStr.toLowerCase().replace(/s$/, '') === 'gram';
+  };
 
   // Reset states when the modal opens with a new log
   useEffect(() => {
     if (log) {
       setEditAmount(log.inputAmount || 1);
-      setEditMetric(log.inputMetric || 'unit');
+      
+      // FIX: Use the normalizer to guarantee the dropdown catches "Gram"
+      setEditMetric(isGramMetric(log.inputMetric) ? 'grams' : 'unit');
+      
       setAddAmount('');
       setEditTab('total');
       setShowMoveOptions(false);
@@ -38,26 +45,24 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
     onClose();
   };
 
-  // --- THE UNIFIED MATH LOGIC ---
-  // Figure out what the final amount will be based on which tab they are using
   const finalAmount = editTab === 'total' 
     ? Number(editAmount) 
     : Number(log.inputAmount) + Number(addAmount || 0);
 
-  // Calculate the macro ratio based on that final amount
+  // Use the normalizer here too, just to be bulletproof
   const ratio = log.baseFood 
-    ? (editMetric === 'grams' ? finalAmount / log.baseFood.baseWeight : finalAmount) 
+    ? (isGramMetric(editMetric) ? finalAmount / log.baseFood.baseWeight : finalAmount) 
     : 1;
 
   const handleSaveChanges = () => {
     if (!log.baseFood) return; 
 
-    // Prevent saving if they are on the 'add' tab but left it blank or zero
     if (editTab === 'add' && (!addAmount || Number(addAmount) <= 0)) return;
 
     onUpdate(log.id, {
       inputAmount: finalAmount,
-      inputMetric: editMetric,
+      // If they leave it as 'unit', we try to save their original custom unit (like "Piece"). Otherwise save the dropdown value.
+      inputMetric: editMetric === 'unit' && !isGramMetric(log.inputMetric) ? (log.inputMetric || 'unit') : editMetric,
       calories: log.baseFood.calories * ratio,
       protein: log.baseFood.protein * ratio,
       carbs: log.baseFood.carbs * ratio,
@@ -65,6 +70,9 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
     });
     handleClose();
   };
+
+  // Check if the original log was a gram for the UI text displays
+  const logIsGram = isGramMetric(log.inputMetric);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end bg-slate-900/40 animate-in fade-in duration-200">
@@ -76,7 +84,7 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
             <h2 className="text-xl font-bold text-slate-800">{log.foodName}</h2>
             <p className="text-sm text-slate-500">
               {showEditMode 
-                ? `Currently: ${log.inputAmount}${log.inputMetric === 'grams' ? 'g' : ' servings'}` 
+                ? `Currently: ${log.inputAmount}${logIsGram ? 'g' : ' servings'}` 
                 : `${Math.round(log.calories)} kcal • Currently in ${log.mealType}`}
             </p>
           </div>
@@ -87,7 +95,6 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
 
         <div className="p-4 space-y-2">
           
-          {/* VIEW 1: Move or Copy Menu */}
           {(showMoveOptions || showCopyOptions) ? (
             <div className="space-y-3 animate-in fade-in slide-in-from-right-4">
               <h3 className="px-2 text-sm font-bold text-slate-500 uppercase tracking-wider">
@@ -114,7 +121,6 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
 
           ) : showEditMode ? (
             
-            /* VIEW 2: UNIFIED EDIT & ADD FORM */
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
               {!log.baseFood && (
                 <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm mb-4">
@@ -122,7 +128,6 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
                 </div>
               )}
               
-              {/* Tab Toggle */}
               <div className="flex bg-slate-100 p-1 rounded-xl">
                 <button 
                   onClick={() => setEditTab('total')}
@@ -138,9 +143,7 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
                 </button>
               </div>
 
-              {/* Dynamic Input Area */}
               {editTab === 'total' ? (
-                // TAB 1: Edit Total Amount
                 <div className="flex gap-4 animate-in fade-in slide-in-from-left-2 duration-200">
                   <div className="flex-1">
                     <label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Amount</label>
@@ -167,14 +170,13 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
                   </div>
                 </div>
               ) : (
-                // TAB 2: Add Extra Amount
                 <div className="animate-in fade-in slide-in-from-right-2 duration-200">
                   <label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">How much more did you have?</label>
                   <div className="flex items-center gap-3">
                     <input 
                       type="number" 
                       min="0" step="0.1"
-                      placeholder={`e.g. ${log.inputMetric === 'grams' ? '50' : '1'}`}
+                      placeholder={`e.g. ${logIsGram ? '50' : '1'}`}
                       className="flex-1 bg-amber-50 border border-amber-200 text-amber-900 text-lg py-3 px-4 rounded-xl outline-none focus:border-amber-500 placeholder:text-amber-300"
                       value={addAmount}
                       onChange={(e) => setAddAmount(e.target.value)}
@@ -182,18 +184,17 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
                       autoFocus
                     />
                     <div className="px-5 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl border border-slate-200">
-                      {log.inputMetric === 'grams' ? 'g' : 'servings'}
+                      {logIsGram ? 'g' : 'servings'}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Live Preview Bar */}
               {log.baseFood && (
                 <div className={`${editTab === 'add' ? 'bg-amber-100' : 'bg-slate-100'} p-4 rounded-xl flex justify-between items-center font-medium transition-colors`}>
                   <div className="flex flex-col">
                     <span className={`${editTab === 'add' ? 'text-amber-700' : 'text-slate-500'} text-xs font-bold uppercase tracking-wider mb-0.5`}>
-                      New Total: {finalAmount}{log.inputMetric === 'grams' ? 'g' : ' units'}
+                      New Total: {finalAmount}{isGramMetric(editMetric) ? 'g' : ' units'}
                     </span>
                     <span className={`${editTab === 'add' ? 'text-amber-900' : 'text-green-600'} font-bold`}>
                       {Math.round(log.baseFood.calories * ratio)} kcal
@@ -223,7 +224,6 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
 
           ) : (
 
-            /* VIEW 3: Main Menu */
             <div className="space-y-1 animate-in fade-in slide-in-from-left-4">
               
               <button onClick={() => setShowEditMode(true)} className="w-full flex items-center gap-4 p-4 rounded-2xl active:bg-slate-50 transition-all">
