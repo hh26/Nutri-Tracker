@@ -399,7 +399,7 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
               )}
             </button>
             <button 
-              onClick={() => { if (!isSavingMeal) setSelectedFood(null); }}
+              onClick={() => setSelectedFood(null)} 
               disabled={isSavingMeal}
               className="w-full mt-3 text-stone-500 font-bold py-4 rounded-2xl active:bg-stone-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >

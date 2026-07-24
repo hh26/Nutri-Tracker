@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Coffee, Sun, Moon, Utensils, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 // NEW: Import getUserProfile
 import { deleteMeal, moveMeal, copyMeal, updateMeal, getDailyLogs, getUserProfile } from '../db/database';
@@ -69,7 +69,7 @@ export default function Dashboard() {
     }
   };
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     setIsLoading(true); 
     const dailyLogs = await getDailyLogs(viewDate); 
     
@@ -84,11 +84,31 @@ export default function Dashboard() {
     
     setDailyTotals(totals);
     setIsLoading(false); 
-  };
+  }, [viewDate]);
 
   useEffect(() => {
     refreshData();
-  }, [viewDate]);
+  }, [refreshData]);
+
+  const handleMove = useCallback(async (id, target) => {
+    await moveMeal(id, target);
+    refreshData();
+  }, [refreshData]);
+
+  const handleCopy = useCallback(async (log, target) => {
+    await copyMeal(log, target);
+    refreshData();
+  }, [refreshData]);
+
+  const handleDelete = useCallback(async (id) => {
+    await deleteMeal(id);
+    refreshData();
+  }, [refreshData]);
+
+  const handleUpdate = useCallback(async (id, data) => {
+    await updateMeal(id, data);
+    refreshData();
+  }, [refreshData]);
 
   const adjustDate = (days) => {
     const dateObj = new Date(viewDate + 'T12:00:00Z');
@@ -228,10 +248,10 @@ export default function Dashboard() {
         isOpen={isActionModalOpen}
         onClose={() => setIsActionModalOpen(false)}
         log={selectedLog}
-        onMove={async (id, target) => { await moveMeal(id, target); refreshData(); }}
-        onCopy={async (log, target) => { await copyMeal(log, target); refreshData(); }}
-        onDelete={async (id) => { await deleteMeal(id); refreshData(); }}
-        onUpdate={async (id, data) => { await updateMeal(id, data); refreshData(); }}
+        onMove={handleMove}
+        onCopy={handleCopy}
+        onDelete={handleDelete}
+        onUpdate={handleUpdate}
       />
 
       <CopyPastMealModal 
