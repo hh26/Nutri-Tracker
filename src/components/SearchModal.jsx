@@ -137,7 +137,12 @@ export default function SearchModal({ isOpen, onClose, mealType, onMealLogged, v
     setSelectedFood(food);
     
     // Helper function to handle casing and singular/plural mismatches (e.g., "Grams" -> "gram")
-    const normalizeMeasure = (str) => str.toLowerCase().replace(/s$/, '');
+    const normalizeMeasure = (str) => {
+      if (!str) return '';
+      const s = str.toLowerCase().trim();
+      if (s === 'g' || s === 'gram' || s === 'grams') return 'gram';
+      return s;
+    };
 
     // 1. SMART PRE-FILL: Check if it's a recent food with a saved history
     if (food.pastAmount && food.pastMetric) {

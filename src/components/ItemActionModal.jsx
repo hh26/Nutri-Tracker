@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowRightLeft, Copy, Trash2, Edit2, Check, Plus } from 'lucide-react';
 
+// --- Universal Normalizer for Metrics ---
+// Returns true if the string is any variation of gram (Gram, grams, g)
+const isGramMetric = (metricStr) => {
+  if (!metricStr) return false;
+  const normalized = metricStr.toLowerCase().trim();
+  return normalized === 'gram' || normalized === 'grams' || normalized === 'g';
+};
+
 export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, onDelete, onUpdate }) {
   const [showMoveOptions, setShowMoveOptions] = useState(false);
   const [showCopyOptions, setShowCopyOptions] = useState(false);
@@ -10,13 +18,6 @@ export default function ItemActionModal({ isOpen, onClose, log, onMove, onCopy, 
   const [editAmount, setEditAmount] = useState(1);
   const [addAmount, setAddAmount] = useState('');
   const [editMetric, setEditMetric] = useState('unit');
-
-  // --- NEW: Universal Normalizer for Metrics ---
-  // Returns true if the string is any variation of gram (Gram, grams, GRAM)
-  const isGramMetric = (metricStr) => {
-    if (!metricStr) return false;
-    return metricStr.toLowerCase().replace(/s$/, '') === 'gram';
-  };
 
   // Reset states when the modal opens with a new log
   useEffect(() => {

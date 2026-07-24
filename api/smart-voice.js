@@ -86,17 +86,30 @@ export default async function handler(req, res) {
       fats: Math.round(((matchedFood.nutrients.FAT || 0) * ratio) * 10) / 10,
     };
 
+    // Create a slimmed-down version of the food object to save in our DB
+    // This avoids saving the entire, large Edamam API response.
+    const baseFoodForDb = {
+      foodId: matchedFood.foodId,
+      label: matchedFood.label,
+      calories: matchedFood.nutrients.ENERC_KCAL || 0,
+      protein: matchedFood.nutrients.PROCNT || 0,
+      carbs: matchedFood.nutrients.CHOCDF || 0,
+      fats: matchedFood.nutrients.FAT || 0,
+      baseWeight: 100, // Edamam nutrients are per 100g
+    };
+
     // 5. Check if this food is ALREADY logged for this meal today
     const today = new Date().toISOString().split('T')[0];
     
-    const { data: existingMeal, error: searchError } = await supabase
+    const { data: existingMeals, error: searchError } = await supabase
       .from('meals')
       .select('*')
       .eq('user_id', userId)
       .eq('date', today)
       .eq('mealType', data.meal)
-      .ilike('foodName', matchedFood.label) // Matches the exact Edamam name
-      .maybeSingle(); // Returns the row if it exists, or null if it doesn't
+      .ilike('foodName', matchedFood.label); // Use ilike for case-insensitivity
+
+    const existingMeal = existingMeals && existingMeals.length > 0 ? existingMeals[0] : null;
 
     if (existingMeal) {
       // 🟢 SCENARIO A: Food already exists! We add to the existing row.
@@ -130,7 +143,7 @@ export default async function handler(req, res) {
           date: today,
           mealType: data.meal,
           foodName: matchedFood.label, 
-          baseFood: matchedFood, // <-- SAVES THE ENTIRE EDAMAM JSON OBJECT
+          baseFood: baseFoodForDb,
           calories: calculatedNutrients.calories,
           protein: calculatedNutrients.protein,
           carbs: calculatedNutrients.carbs,
