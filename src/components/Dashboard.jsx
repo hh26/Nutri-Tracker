@@ -70,7 +70,6 @@ export default function Dashboard() {
   };
 
   const refreshData = useCallback(async () => {
-    if (isLoading) return; // Prevent concurrent refreshes
     setIsLoading(true);
     try {
       const dailyLogs = await getDailyLogs(viewDate);
@@ -90,7 +89,7 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [viewDate, isLoading]);
+  }, [viewDate]);
 
   useEffect(() => {
     refreshData();
